@@ -860,10 +860,10 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#accepted-values-tract-mode" class="md-nav__link">
+  <a href="#tract-mode-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Accepted values — --tract-mode
+        Tract mode options
       
     </span>
   </a>
@@ -871,10 +871,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#-lesion-path-format" class="md-nav__link">
+  <a href="#lesion-path-format" class="md-nav__link">
     <span class="md-ellipsis">
       
-        --lesion-path format
+        Lesion path format
       
     </span>
   </a>
@@ -882,10 +882,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#-maps-format" class="md-nav__link">
+  <a href="#maps-format" class="md-nav__link">
     <span class="md-ellipsis">
       
-        --maps format
+        Maps format
       
     </span>
   </a>
@@ -893,10 +893,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#accepted-values-space" class="md-nav__link">
+  <a href="#space-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Accepted values — space
+        Space options
       
     </span>
   </a>
@@ -904,10 +904,10 @@
 </li>
         
           <li class="md-nav__item">
-  <a href="#accepted-values-scheduler" class="md-nav__link">
+  <a href="#scheduler-options" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Accepted values — --scheduler
+        Scheduler options
       
     </span>
   </a>
@@ -1303,7 +1303,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="accepted-values-tract-mode">Accepted values — <code>--tract-mode</code><a class="headerlink" href="#accepted-values-tract-mode" title="Permanent link">&para;</a></h3>
+<h3 id="tract-mode-options">Tract mode options<a class="headerlink" href="#tract-mode-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -1326,7 +1326,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="-lesion-path-format"><code>--lesion-path</code> format<a class="headerlink" href="#-lesion-path-format" title="Permanent link">&para;</a></h3>
+<h3 id="lesion-path-format">Lesion path format<a class="headerlink" href="#lesion-path-format" title="Permanent link">&para;</a></h3>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>[name=]base_dir:glob_pattern[:space]
 </span></code></pre></div>
 <p>Multiple lesion types can be passed as a comma-separated list in a single
@@ -1334,14 +1334,14 @@ one row per subject with columns for each tract × metric combination.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>wmh=./bamos/{subject}:bamos/CorrectLesion_*.nii.gz:t1,lacunes=./lac/{subject}:lac_*.nii.gz:t1
 </span></code></pre></div>
 <p>When <code>name</code> is omitted, it defaults to <code>lesion</code>.</p>
-<h3 id="-maps-format"><code>--maps</code> format<a class="headerlink" href="#-maps-format" title="Permanent link">&para;</a></h3>
+<h3 id="maps-format">Maps format<a class="headerlink" href="#maps-format" title="Permanent link">&para;</a></h3>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>metric_name=base_dir:glob_pattern:space
 </span></code></pre></div>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>--maps<span class="w"> </span><span class="s2">&quot;dti_fa=./dti_outputs:fa.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>--maps<span class="w"> </span><span class="s2">&quot;dti_md=./dti_outputs:md.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>--maps<span class="w"> </span><span class="s2">&quot;noddi_odi=./noddi_outputs:odi.nii.gz:dwi&quot;</span>
 </span></code></pre></div>
-<h3 id="accepted-values-space">Accepted values — <code>space</code><a class="headerlink" href="#accepted-values-space" title="Permanent link">&para;</a></h3>
+<h3 id="space-options">Space options<a class="headerlink" href="#space-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -1364,7 +1364,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 </tbody>
 </table>
-<h3 id="accepted-values-scheduler">Accepted values — <code>--scheduler</code><a class="headerlink" href="#accepted-values-scheduler" title="Permanent link">&para;</a></h3>
+<h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
