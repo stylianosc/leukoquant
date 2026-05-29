@@ -960,6 +960,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#synthstrip" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        SynthStrip
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#tracula" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1037,17 +1048,6 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#dipy" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        dipy
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
   <a href="#snakemake" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1074,6 +1074,17 @@
     <span class="md-ellipsis">
       
         dcm2niix
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#python-libraries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python Libraries
       
     </span>
   </a>
@@ -1112,11 +1123,15 @@
 <p>LeukoQuant builds on several open-source tools and published methods. If you use LeukoQuant in your research, please also cite the relevant underlying tools listed below.</p>
 <hr />
 <h2 id="freesurfer">FreeSurfer<a class="headerlink" href="#freesurfer" title="Permanent link">&para;</a></h2>
-<p>Used for cortical surface reconstruction (<code>process-recon</code>), subcortical segmentation, and thalamic nuclei parcellation.</p>
+<p>Used for cortical reconstruction, subcortical segmentation, and brain parcellation (<code>process-recon</code>).</p>
 <ul>
-<li>Fischl B, Salat DH, Busa E, Albert M, Dieterich M, Haselgrove C, van der Kouwe A, Killiany R, Kennedy D, Klaveness S, Montillo A, Makris N, Rosen B, Dale AM (2002). Whole brain segmentation: automated labeling of neuroanatomical structures in the human brain. <em>Neuron</em>, 33(3):341–355. https://doi.org/10.1016/S0896-6273(02)00569-X</li>
-<li>Dale AM, Fischl B, Sereno MI (1999). Cortical surface-based analysis: I. Segmentation and surface reconstruction. <em>NeuroImage</em>, 9(2):179–194. https://doi.org/10.1006/nimg.1998.0395</li>
-<li>Desikan RS, Ségonne F, Fischl B, Quinn BT, Dickerson BC, Blacker D, Buckner RL, Dale AM, Maguire RP, Hyman BT, Albert MS, Killiany RJ (2006). An automated labeling system for subdividing the human cerebral cortex on MRI scans into gyral based regions of interest. <em>NeuroImage</em>, 31(3):968–980. https://doi.org/10.1016/j.neuroimage.2006.01.021</li>
+<li>Fischl B (2012). FreeSurfer. <em>NeuroImage</em>, 62(2):774–781. https://doi.org/10.1016/j.neuroimage.2012.01.021</li>
+</ul>
+<hr />
+<h2 id="synthstrip">SynthStrip<a class="headerlink" href="#synthstrip" title="Permanent link">&para;</a></h2>
+<p>Used for skull-stripping (<code>--skull-strip</code> flag in <code>process-dti</code> and <code>process-noddi</code>).</p>
+<ul>
+<li>Hoopes A, Mora JS, Dalca AV, Fischl B, Hoffmann M (2022). SynthStrip: skull-stripping for any brain image. <em>NeuroImage</em>, 260:119474. https://doi.org/10.1016/j.neuroimage.2022.119474</li>
 </ul>
 <hr />
 <h2 id="tracula">TRACULA<a class="headerlink" href="#tracula" title="Permanent link">&para;</a></h2>
@@ -1163,12 +1178,6 @@
 <li>Cardoso MJ, Leung K, Modat M, Keihaninejad S, Cash D, Barnes J, Fox NC, Ourselin S; ADNI (2013). STEPS: Similarity and truth estimation for propagated segmentations and its application to hippocampal segmentation and brain parcellation. <em>Medical Image Analysis</em>, 17(6):671–684. https://doi.org/10.1016/j.media.2013.02.006</li>
 </ul>
 <hr />
-<h2 id="dipy">dipy<a class="headerlink" href="#dipy" title="Permanent link">&para;</a></h2>
-<p>Used for tractogram loading and streamline processing.</p>
-<ul>
-<li>Garyfallidis E, Brett M, Amirbekian B, Rokem A, van der Walt S, Descoteaux M, Nimmo-Smith I (2014). Dipy, a library for the analysis of diffusion MRI data. <em>Frontiers in Neuroinformatics</em>, 8:8. https://doi.org/10.3389/fninf.2014.00008</li>
-</ul>
-<hr />
 <h2 id="snakemake">Snakemake<a class="headerlink" href="#snakemake" title="Permanent link">&para;</a></h2>
 <p>Used as the workflow engine.</p>
 <ul>
@@ -1185,6 +1194,19 @@
 <p>Used for DICOM to NIfTI conversion.</p>
 <ul>
 <li>Li X, Morgan PS, Ashburner J, Smith J, Rorden C (2016). The first step for neuroimaging data analysis: DICOM to NIfTI conversion. <em>Journal of Neuroscience Methods</em>, 264:47–56. https://doi.org/10.1016/j.jneumeth.2016.03.001</li>
+</ul>
+<hr />
+<h2 id="python-libraries">Python Libraries<a class="headerlink" href="#python-libraries" title="Permanent link">&para;</a></h2>
+<p>Core scientific Python libraries used throughout the pipeline.</p>
+<ul>
+<li><strong>NumPy</strong> — Harris CR, Millman KJ, van der Walt SJ, Gommers R, Virtanen P, Cournapeau D, Wieser E, Taylor J, Berg S, Smith NJ, Kern R, Picus M, Hoyer S, van Kerkwijk MH, Brett M, Haldane A, del Río JF, Wiebe M, Peterson P, Gérard-Marchant P, Sheppard K, Reddy T, Weckesser W, Abbasi H, Gohlke C, Oliphant TE (2020). Array programming with NumPy. <em>Nature</em>, 585:357–362. https://doi.org/10.1038/s41586-020-2649-2</li>
+<li><strong>SciPy</strong> — Virtanen P, Gommers R, Oliphant TE, Haberland M, Reddy T, Cournapeau D, Burovski E, Peterson P, Weckesser W, Bright J, van der Walt SJ, Brett M, Wilson J, Millman KJ, Mayorov N, Nelson ARJ, Jones E, Kern R, Larson E, Carey CJ, Polat İ, Feng Y, Moore EW, VanderPlas J, Laxalde D, Perktold J, Cimrman R, Henriksen I, Quintero EA, Harris CR, Archibald AM, Ribeiro AH, Pedregosa F, van Mulbregt P, SciPy 1.0 Contributors (2020). SciPy 1.0: fundamental algorithms for scientific computing in Python. <em>Nature Methods</em>, 17:261–272. https://doi.org/10.1038/s41592-019-0686-2</li>
+<li><strong>pandas</strong> — McKinney W (2010). Data structures for statistical computing in Python. <em>Proceedings of the 9th Python in Science Conference</em>, 56–61. https://doi.org/10.25080/Majora-92bf1922-00a</li>
+<li><strong>Matplotlib</strong> — Hunter JD (2007). Matplotlib: A 2D graphics environment. <em>Computing in Science &amp; Engineering</em>, 9(3):90–95. https://doi.org/10.1109/MCSE.2007.55</li>
+<li><strong>scikit-image</strong> — van der Walt S, Schönberger JL, Nunez-Iglesias J, Boulogne F, Warner JD, Yager N, Gouillart E, Yu T, scikit-image contributors (2014). scikit-image: image processing in Python. <em>PeerJ</em>, 2:e453. https://doi.org/10.7717/peerj.453</li>
+<li><strong>scikit-learn</strong> — Pedregosa F, Varoquaux G, Gramfort A, Michel V, Thirion B, Grisel O, Blondel M, Prettenhofer P, Weiss R, Dubourg V, Vanderplas J, Passos A, Cournapeau D, Brucher M, Perrot M, Duchesnay É (2011). Scikit-learn: Machine learning in Python. <em>Journal of Machine Learning Research</em>, 12:2825–2830. http://jmlr.org/papers/v12/pedregosa11a.html</li>
+<li><strong>nilearn</strong> — Abraham A, Pedregosa F, Eickenberg M, Gervais P, Mueller A, Kossaifi J, Gramfort A, Thirion B, Varoquaux G (2014). Machine learning for neuroimaging with scikit-learn. <em>Frontiers in Neuroinformatics</em>, 8:14. https://doi.org/10.3389/fninf.2014.00014</li>
+<li><strong>dipy</strong> — Garyfallidis E, Brett M, Amirbekian B, Rokem A, van der Walt S, Descoteaux M, Nimmo-Smith I (2014). Dipy, a library for the analysis of diffusion MRI data. <em>Frontiers in Neuroinformatics</em>, 8:8. https://doi.org/10.3389/fninf.2014.00008</li>
 </ul>
 
 
