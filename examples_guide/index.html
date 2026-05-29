@@ -1392,7 +1392,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 </span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_t1_flair_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>With an optional brain mask: (NEEDS TESTING)</strong>
+<p><strong>With an optional brain mask:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>--t1<span class="w"> </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -1421,7 +1421,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/bamos_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Multiple subjects — reusing GIF outputs from a previous <code>process-gif</code> run: (NEEDS TESTING)</strong>
+<p><strong>Multiple subjects — reusing GIF outputs from a previous <code>process-gif</code> run:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -1455,7 +1455,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 <em>Optional:</em> <code>--freesurfer-recon-dir</code>, <code>--t1</code>, <code>--bvecs</code>, <code>--bvals</code>.</p>
 <p>If <code>--freesurfer-recon-dir</code> is omitted, or if recon-all outputs are missing for any subject,
 recon-all is run automatically before TRACULA. In that case <code>--t1</code> is required.</p>
-<p><strong>Without existing recon-all (runs recon-all automatically): (NEEDS TESTING)</strong>
+<p><strong>Without existing recon-all (runs recon-all automatically):</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>leukoquant<span class="w"> </span>process-tracula<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>--dwi<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/DWI/I*.zip<span class="w"> </span><span class="se">\</span>
@@ -1463,7 +1463,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/tracula_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Multiple subjects: (NEEDS TESTING)</strong>
+<p><strong>Multiple subjects:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>leukoquant<span class="w"> </span>process-tracula<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span>--dwi<span class="w">    </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -1471,7 +1471,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span><span id="__span-14-5"><a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/tracula_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-14-6"><a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>With existing recon-all outputs: (NEEDS TESTING)</strong>
+<p><strong>With existing recon-all outputs:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>leukoquant<span class="w"> </span>process-tracula<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-15-2"><a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-15-3"><a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span>--dwi<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/DWI/I*.zip<span class="w"> </span><span class="se">\</span>
@@ -1519,7 +1519,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span></code></pre></div></p>
 <hr />
 <h2 id="process-metrics">process-metrics<a class="headerlink" href="#process-metrics" title="Permanent link">&para;</a></h2>
-<p><strong>Compute metrics along tracts, lesions, and ROIs. (NEEDS TESTING)</strong>
+<p><strong>Compute metrics along tracts, lesions, and ROIs.</strong>
 <em>Mandatory:</em> <code>--subject</code>, <code>--tractography-path</code>, <code>--output-dir</code>.
 <em>Optional:</em> <code>--t1-path</code>, <code>--dwi-path</code>, <code>--lesion-path</code>, <code>--maps</code>, <code>--tract-mode</code>.</p>
 <p>The <code>--tract-mode</code> argument controls the analysis approach:
@@ -1532,7 +1532,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">  </span>--tractography-path<span class="w"> </span>./results/tracula/<span class="o">{</span>subject<span class="o">}</span>:dpath/*/path.pd.nii.gz:dwi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./results/metrics
 </span></code></pre></div></p>
-<p><strong>Multiple subjects with lesion and DTI metrics: (NEEDS TESTING)</strong>
+<p><strong>Multiple subjects with lesion and DTI metrics:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-21-1"><a id="__codelineno-21-1" name="__codelineno-21-1" href="#__codelineno-21-1"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-21-2"><a id="__codelineno-21-2" name="__codelineno-21-2" href="#__codelineno-21-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-21-3"><a id="__codelineno-21-3" name="__codelineno-21-3" href="#__codelineno-21-3"></a><span class="w">  </span>--tractography-path<span class="w"> </span>./results/tracula:dpath/*/path.pd.nii.gz:dwi<span class="w"> </span><span class="se">\</span>
@@ -1554,7 +1554,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span></code></pre></div></p>
 <hr />
 <h2 id="process-tract-qc">process-tract-qc<a class="headerlink" href="#process-tract-qc" title="Permanent link">&para;</a></h2>
-<p><strong>Run tractography quality control. (NEEDS TESTING)</strong>
+<p><strong>Run tractography quality control.</strong>
 <em>Mandatory:</em> <code>--subject</code>, <code>--tractography-path</code>, <code>--output-dir</code>.</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
@@ -1571,7 +1571,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 </span></code></pre></div></p>
 <hr />
 <h2 id="process-zscore">process-zscore<a class="headerlink" href="#process-zscore" title="Permanent link">&para;</a></h2>
-<p><strong>Run a standalone Z-score analysis. (NEEDS TESTING)</strong>
+<p><strong>Run a standalone Z-score analysis.</strong>
 <em>Mandatory:</em> <code>--healthy-list</code>, <code>--target-list</code>, <code>--t1-path</code>, <code>--metric</code>, <code>--output-dir</code>.
 <em>Optional:</em> <code>--demographics-csv</code>, <code>--covariates</code>, <code>--polynomial-terms</code>.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-25-1"><a id="__codelineno-25-1" name="__codelineno-25-1" href="#__codelineno-25-1"></a>leukoquant<span class="w"> </span>process-zscore<span class="w"> </span><span class="se">\</span>

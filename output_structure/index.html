@@ -705,17 +705,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#implementation-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Implementation Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1288,17 +1277,6 @@
   
 </li>
       
-        <li class="md-nav__item">
-  <a href="#implementation-notes" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Implementation Notes
-      
-    </span>
-  </a>
-  
-</li>
-      
     </ul>
   
 </nav>
@@ -1397,7 +1375,7 @@
 </span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>│   │   │   ├── path.pd.nii.gz               [OUTPUT - streamline count map]
 </span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>│   │   │   ├── path.pd.trk                  [OUTPUT - tractography file]
 </span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>│   │   │   └── [...endpoint and statistics files...]
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>│   │   └── [... 70+ tract directories with similar structure ...]
+</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>│   │   └── [... 42 tract directories with similar structure ...]
 </span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>│   └── dmri/
 </span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>│       └── nodif_brain_mask.nii.gz          [OUTPUT - brain mask used by metrics/dti/noddi]
 </span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>├── intermediate/
@@ -1438,15 +1416,15 @@
 <p>GIF (Group-wise Image registration for Functional analysis) brain segmentation and parcellation.</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>gif/
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>├── outputs/
-</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│   ├── I863056_NeuroMorph_Parcellation.nii.gz       [OUTPUT - brain parcellation]
-</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── I863056_NeuroMorph_Segmentation.nii.gz       [OUTPUT - tissue segmentation]
-</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   ├── I863056_NeuroMorph_Brain.nii.gz              [OUTPUT - skull-stripped brain]
-</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   └── I863056_NeuroMorph_TIV.nii.gz                [OUTPUT - total intracranial volume]
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>│   ├── sub-01_T1_NeuroMorph_Parcellation.nii.gz       [OUTPUT - brain parcellation]
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>│   ├── sub-01_T1_NeuroMorph_Segmentation.nii.gz       [OUTPUT - tissue segmentation]
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>│   ├── sub-01_T1_NeuroMorph_Brain.nii.gz              [OUTPUT - skull-stripped brain]
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>│   └── sub-01_T1_NeuroMorph_TIV.nii.gz                [OUTPUT - total intracranial volume]
 </span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>├── intermediate/
-</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│   ├── I863056_NeuroMorph_BiasCorrected.nii.gz      [INTERMEDIATE - bias corrected T1]
-</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   ├── I863056_NeuroMorph_prior.nii.gz              [INTERMEDIATE - probability maps]
-</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   ├── I863056_NeuroMorph.xml                       [INTERMEDIATE - GIF metadata]
-</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   └── I863056_gw_affine.txt                        [INTERMEDIATE - registration parameters]
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>│   ├── sub-01_T1_NeuroMorph_BiasCorrected.nii.gz      [INTERMEDIATE - bias corrected T1]
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>│   ├── sub-01_T1_NeuroMorph_prior.nii.gz              [INTERMEDIATE - probability maps]
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>│   ├── sub-01_T1_NeuroMorph.xml                       [INTERMEDIATE - GIF metadata]
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>│   └── sub-01_T1_gw_affine.txt                        [INTERMEDIATE - registration parameters]
 </span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>└── logs/
 </span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    └── gif.log                                      [LOG]
 </span></code></pre></div>
@@ -1507,37 +1485,6 @@
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>│   └── qc_report.csv                        [OUTPUT - tractography QC metrics per tract]
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a>└── logs/
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a>    └── tract_qc_log.txt                     [LOG]
-</span></code></pre></div>
-<hr />
-<h2 id="implementation-notes">Implementation Notes<a class="headerlink" href="#implementation-notes" title="Permanent link">&para;</a></h2>
-<ol>
-<li><strong>Consistency</strong>: All modules follow a unified structure with <code>outputs/</code>, <code>intermediate/</code>, and <code>logs/</code> directories.</li>
-<li>
-<p><strong>File Organization</strong>:</p>
-</li>
-<li>
-<p><code>outputs/</code>: Final results ready for analysis or publication</p>
-</li>
-<li><code>intermediate/</code>: Working files, temporary data, metadata, configuration files</li>
-<li><code>logs/</code>: All logging output for debugging and auditing</li>
-<li>
-<p><strong>Workflow Updates Required</strong>:</p>
-</li>
-<li>
-<p>recon_all_workflow.smk: Reorganize output paths</p>
-</li>
-<li>tracula_workflow.smk: Reorganize output paths, move dmrirc config to intermediate</li>
-<li>gif_workflow.smk: Reorganize output paths</li>
-<li>dti_workflow.smk: Reorganize output paths</li>
-<li>noddi_workflow.smk: Reorganize output paths</li>
-<li>metrics_workflow.smk: Remove nested subject folder</li>
-<li>tract_qc_workflow.smk: Remove nested subject folder</li>
-<li>process_all_workflow.smk: Update all module config paths</li>
-<li><strong>Output Paths in Config</strong>: Each module config will specify:</li>
-</ol>
-<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="s2">&quot;outputs_dir&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">/outputs&quot;</span><span class="p">,</span>
-</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="s2">&quot;intermediate_dir&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">/intermediate&quot;</span><span class="p">,</span>
-</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="s2">&quot;logs_dir&quot;</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;</span><span class="si">{</span><span class="n">output_dir</span><span class="si">}</span><span class="s2">/</span><span class="si">{</span><span class="n">module</span><span class="si">}</span><span class="s2">/logs&quot;</span><span class="p">,</span>
 </span></code></pre></div>
 
 
