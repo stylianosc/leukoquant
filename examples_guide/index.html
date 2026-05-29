@@ -10,6 +10,8 @@
       
       
       
+        <link rel="canonical" href="https://stylianosc.github.io/leukoquant/examples_guide/">
+      
       
         <link rel="prev" href="../user_guide/">
       
@@ -313,6 +315,25 @@
         </a>
       </li>
     
+  
+
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../citations/" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Citations
+
+      </a>
+    </li>
   
 
       
@@ -1108,6 +1129,33 @@
   
 
     
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../citations/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Citations
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
   </ul>
 </nav>
                   </div>
@@ -1309,7 +1357,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 <p>When only <code>--flair</code> is given, GIF runs on the FLAIR as the primary input (useful when no T1 is available or when a FLAIR-trained atlas is used). When both <code>--t1</code> and <code>--flair</code> are supplied, the T1 is used and FLAIR is ignored (the GIF script does not support multi-channel input).</p>
 <p><strong>Single subject (T1 only):</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--t1<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/T1/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
@@ -1324,7 +1372,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 <p><strong>Single subject — FLAIR only:</strong></p>
 <p>When running GIF on FLAIR-only input, GIF uses a FLAIR-specific database. By default this is <code>&lt;GIF_HOME&gt;/db_FLAIR/</code> (which must contain <code>db.xml</code>). Pass <code>--gif-flair-db</code> to override with a different directory. The standard T1 database (<code>&lt;GIF_HOME&gt;/db/</code>) is used automatically when <code>--t1</code> is present.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--flair<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/FLAIR/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_flair_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
@@ -1359,7 +1407,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 <em>Optional:</em> <code>--gif-results-dir</code> (runs GIF automatically if omitted).</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>--flair<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/FLAIR/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-8-4"><a id="__codelineno-8-4" name="__codelineno-8-4" href="#__codelineno-8-4"></a><span class="w">  </span>--t1<span class="w">    </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/T1/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-8-5"><a id="__codelineno-8-5" name="__codelineno-8-5" href="#__codelineno-8-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/bamos_single<span class="w"> </span><span class="se">\</span>
@@ -1388,7 +1436,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 <em>Mandatory:</em> <code>--subject</code>, <code>--t1</code>, <code>--output-dir</code>.</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>leukoquant<span class="w"> </span>process-recon<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-11-2"><a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-3"><a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>--t1<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/T1/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-4"><a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/recon_all_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-11-5"><a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
@@ -1409,7 +1457,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 recon-all is run automatically before TRACULA. In that case <code>--t1</code> is required.</p>
 <p><strong>Without existing recon-all (runs recon-all automatically): (NEEDS TESTING)</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>leukoquant<span class="w"> </span>process-tracula<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>--dwi<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/DWI/I*.zip<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="w">  </span>--t1<span class="w"> </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/T1/I*.nii.gz<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/tracula_single<span class="w"> </span><span class="se">\</span>
@@ -1438,7 +1486,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 <em>Optional:</em> <code>--mask</code>, <code>--bvecs</code>, <code>--bvals</code>. If <code>--mask</code> is omitted, DTI is fit on the whole image.</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-16-2"><a id="__codelineno-16-2" name="__codelineno-16-2" href="#__codelineno-16-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-16-3"><a id="__codelineno-16-3" name="__codelineno-16-3" href="#__codelineno-16-3"></a><span class="w">  </span>--dwi<span class="w">  </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/DWI/I*.zip<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-16-4"><a id="__codelineno-16-4" name="__codelineno-16-4" href="#__codelineno-16-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/dti_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-16-5"><a id="__codelineno-16-5" name="__codelineno-16-5" href="#__codelineno-16-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
@@ -1457,7 +1505,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 <em>Optional:</em> <code>--mask</code>, <code>--bvecs</code>, <code>--bvals</code>. If <code>--mask</code> is omitted, NODDI is fit on the whole image.</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>leukoquant<span class="w"> </span>process-noddi<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a><span class="w">  </span>--dwi<span class="w">  </span>./examples/sample_files/SCANS/<span class="o">{</span>subject<span class="o">}</span>/DWI/I*.zip<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-18-4"><a id="__codelineno-18-4" name="__codelineno-18-4" href="#__codelineno-18-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/noddi_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-18-5"><a id="__codelineno-18-5" name="__codelineno-18-5" href="#__codelineno-18-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
@@ -1480,7 +1528,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 - <code>atlas</code>: atlas-based only</p>
 <p><strong>Single subject (default tract-mode):</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-20-1"><a id="__codelineno-20-1" name="__codelineno-20-1" href="#__codelineno-20-1"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-20-2"><a id="__codelineno-20-2" name="__codelineno-20-2" href="#__codelineno-20-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-20-3"><a id="__codelineno-20-3" name="__codelineno-20-3" href="#__codelineno-20-3"></a><span class="w">  </span>--tractography-path<span class="w"> </span>./results/tracula/<span class="o">{</span>subject<span class="o">}</span>:dpath/*/path.pd.nii.gz:dwi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-20-4"><a id="__codelineno-20-4" name="__codelineno-20-4" href="#__codelineno-20-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./results/metrics
 </span></code></pre></div></p>
@@ -1510,7 +1558,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 <em>Mandatory:</em> <code>--subject</code>, <code>--tractography-path</code>, <code>--output-dir</code>.</p>
 <p><strong>Single subject:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-23-1"><a id="__codelineno-23-1" name="__codelineno-23-1" href="#__codelineno-23-1"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-23-2"><a id="__codelineno-23-2" name="__codelineno-23-2" href="#__codelineno-23-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-23-3"><a id="__codelineno-23-3" name="__codelineno-23-3" href="#__codelineno-23-3"></a><span class="w">  </span>--tractography-path<span class="w"> </span>./results/tracula/<span class="o">{</span>subject<span class="o">}</span>:dpath/*/path.pd.nii.gz:dwi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-23-4"><a id="__codelineno-23-4" name="__codelineno-23-4" href="#__codelineno-23-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./results/tract_qc
 </span></code></pre></div></p>
@@ -1569,7 +1617,7 @@ Multiple subjects are launched as concurrent Snakemake processes.</p>
 <p><strong>Single subject (using real sample files):</strong>
 <em>Mandatory:</em> <code>--subject</code>, <code>--t1</code>, <code>--flair</code>, <code>--dwi</code>, <code>--output-dir</code>.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-28-1"><a id="__codelineno-28-1" name="__codelineno-28-1" href="#__codelineno-28-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-28-2"><a id="__codelineno-28-2" name="__codelineno-28-2" href="#__codelineno-28-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
@@ -1588,7 +1636,7 @@ Multiple subjects are launched as concurrent Snakemake processes.</p>
 <p><strong>Single subject — using GIF parcellation instead of FreeSurfer for TRACULA:</strong>
 GIF runs on the T1 first; its parcellation output is then converted to FreeSurfer label space and used by TRACULA in place of the standard <code>aparc+aseg</code>. Both single- and multi-subject runs are supported.
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-002-s-0413/subj-002-s-0413-sess-2017-06-21<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-30-3"><a id="__codelineno-30-3" name="__codelineno-30-3" href="#__codelineno-30-3"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-30-4"><a id="__codelineno-30-4" name="__codelineno-30-4" href="#__codelineno-30-4"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-30-5"><a id="__codelineno-30-5" name="__codelineno-30-5" href="#__codelineno-30-5"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./examples/sample_files/SCANS/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
