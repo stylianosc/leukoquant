@@ -1010,6 +1010,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#config-file-config-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file (--config-yaml)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1212,7 +1223,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>-i</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
@@ -1220,7 +1231,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>-t</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>T1 NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1228,7 +1239,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>-f</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>FLAIR NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1236,7 +1247,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>-d</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>DWI NIfTI (or <code>.zip</code> DICOM archive) file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1316,7 +1327,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>-o</code></td>
 <td><code>path</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Root output directory</td>
 </tr>
 <tr>
@@ -1336,6 +1347,22 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td>Number of Snakemake cores</td>
 </tr>
 <tr>
+<td><code>--config-yaml</code></td>
+<td>—</td>
+<td><code>path</code></td>
+<td><code>None</code></td>
+<td>No</td>
+<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>—</td>
+<td>flag</td>
+<td><code>False</code></td>
+<td>No</td>
+<td>Force-rerun metrics extraction (for <code>--parcellation</code>) even if outputs already exist. Anything upstream that's already up to date (recon-all, GIF, BaMoS, DTI, NODDI, TRACULA) is left untouched.</td>
+</tr>
+<tr>
 <td><code>--verbose</code></td>
 <td><code>-v</code></td>
 <td>flag</td>
@@ -1345,6 +1372,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 </tbody>
 </table>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
 <h3 id="parcellation-options">Parcellation options<a class="headerlink" href="#parcellation-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1387,6 +1415,100 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
+<p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--t1</code>, <code>--flair</code>, <code>--dwi</code>,
+and <code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
+priority</strong> over the equivalent YAML key when both are given — the YAML file
+only fills in whatever the CLI left unset.</p>
+<p>Recognized keys:</p>
+<table>
+<thead>
+<tr>
+<th>YAML key</th>
+<th>Equivalent flag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code> (or <code>subject_input</code>)</td>
+<td><code>--subject</code></td>
+</tr>
+<tr>
+<td><code>t1</code> (or <code>t1_pattern</code>)</td>
+<td><code>--t1</code></td>
+</tr>
+<tr>
+<td><code>flair</code> (or <code>flair_pattern</code>)</td>
+<td><code>--flair</code></td>
+</tr>
+<tr>
+<td><code>dwi</code> (or <code>dwi_pattern</code>)</td>
+<td><code>--dwi</code></td>
+</tr>
+<tr>
+<td><code>bvecs</code> (or <code>bvecs_pattern</code>)</td>
+<td><code>--bvecs</code></td>
+</tr>
+<tr>
+<td><code>bvals</code> (or <code>bvals_pattern</code>)</td>
+<td><code>--bvals</code></td>
+</tr>
+<tr>
+<td><code>mask</code> (or <code>mask_pattern</code>)</td>
+<td><code>--mask</code></td>
+</tr>
+<tr>
+<td><code>parcellation</code></td>
+<td><code>--parcellation</code></td>
+</tr>
+<tr>
+<td><code>healthy_list</code> (or <code>healthy_subjects_list</code>)</td>
+<td><code>--healthy-subjects</code></td>
+</tr>
+<tr>
+<td><code>demographics</code> (or <code>demographics_csv</code>)</td>
+<td><code>--demographics-csv</code></td>
+</tr>
+<tr>
+<td><code>covariates</code></td>
+<td><code>--covariates</code></td>
+</tr>
+<tr>
+<td><code>poly_terms</code> (or <code>polynomial_terms</code>)</td>
+<td><code>--poly-terms</code></td>
+</tr>
+<tr>
+<td><code>skip_zscore</code></td>
+<td><code>--skip-zscore</code></td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td><code>--output-dir</code></td>
+</tr>
+<tr>
+<td><code>scheduler</code></td>
+<td><code>--scheduler</code></td>
+</tr>
+<tr>
+<td><code>cores</code></td>
+<td><code>--cores</code></td>
+</tr>
+</tbody>
+</table>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># process_all_config.yaml</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./subjects.txt</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">t1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nt">flair</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">dwi</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/DWI/I*.zip&quot;</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./outputs</span>
+</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
+</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="nt">cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="c1"># override just the parcellation for this run; everything else still comes from the YAML</span>
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml<span class="w"> </span>--parcellation<span class="w"> </span>gif
+</span></code></pre></div>
 <h2 id="returns">Returns<a class="headerlink" href="#returns" title="Permanent link">&para;</a></h2>
 <p><code>dict</code> with keys:</p>
 <table>
@@ -1427,75 +1549,75 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
   <code>metrics-freesurfer/</code>, <code>metrics-gif/</code>, <code>tract_qc-freesurfer/</code>, <code>tract_qc-gif/</code>.</li>
 </ul>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>{output_dir}/
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>└── {subject}/
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    ├── gif/outputs/
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>    ├── recon-all/outputs/          (freesurfer parcellation only)
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>    ├── bamos/outputs/
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>    ├── dti/outputs/
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>    ├── noddi/outputs/
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>    ├── tracula-freesurfer/outputs/ (freesurfer parcellation)
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>    ├── tracula-gif/outputs/        (gif parcellation)
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a>    ├── metrics-freesurfer/outputs/
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a>    │   └── whole_brain_metrics.csv
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a>    ├── metrics-gif/outputs/        (gif parcellation)
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a>    │   └── whole_brain_metrics.csv
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>    ├── tract_qc-freesurfer/outputs/
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a>    │   └── qc_report.csv
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>    ├── tract_qc-gif/outputs/       (gif parcellation)
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a>    │   └── qc_report.csv
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a>    └── z_scores/outputs/           (when --healthy-subjects is provided)
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{output_dir}/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>└── {subject}/
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    ├── gif/outputs/
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>    ├── recon-all/outputs/          (freesurfer parcellation only)
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>    ├── bamos/outputs/
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>    ├── dti/outputs/
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>    ├── noddi/outputs/
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>    ├── tracula-freesurfer/outputs/ (freesurfer parcellation)
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>    ├── tracula-gif/outputs/        (gif parcellation)
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a>    ├── metrics-freesurfer/outputs/
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a>    │   └── whole_brain_metrics.csv
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a>    ├── metrics-gif/outputs/        (gif parcellation)
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a>    │   └── whole_brain_metrics.csv
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>    ├── tract_qc-freesurfer/outputs/
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a>    │   └── qc_report.csv
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>    ├── tract_qc-gif/outputs/       (gif parcellation)
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a>    │   └── qc_report.csv
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a>    └── z_scores/outputs/           (when --healthy-subjects is provided)
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Single subject, default freesurfer parcellation</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--t1<span class="w">    </span>./data/sub-001/T1/scan.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--flair<span class="w"> </span>./data/sub-001/FLAIR/scan.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>--dwi<span class="w">   </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a><span class="c1"># Multiple subjects, SGE cluster, freesurfer parcellation</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-14"><a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-15"><a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-16"><a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
-</span><span id="__span-3-17"><a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>
-</span><span id="__span-3-18"><a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a><span class="c1"># GIF parcellation only</span>
-</span><span id="__span-3-19"><a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-20"><a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-21"><a id="__codelineno-3-21" name="__codelineno-3-21" href="#__codelineno-3-21"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-22"><a id="__codelineno-3-22" name="__codelineno-3-22" href="#__codelineno-3-22"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-23"><a id="__codelineno-3-23" name="__codelineno-3-23" href="#__codelineno-3-23"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-24"><a id="__codelineno-3-24" name="__codelineno-3-24" href="#__codelineno-3-24"></a><span class="w">  </span>--parcellation<span class="w"> </span>gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-25"><a id="__codelineno-3-25" name="__codelineno-3-25" href="#__codelineno-3-25"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-26"><a id="__codelineno-3-26" name="__codelineno-3-26" href="#__codelineno-3-26"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
-</span><span id="__span-3-27"><a id="__codelineno-3-27" name="__codelineno-3-27" href="#__codelineno-3-27"></a>
-</span><span id="__span-3-28"><a id="__codelineno-3-28" name="__codelineno-3-28" href="#__codelineno-3-28"></a><span class="c1"># Both freesurfer and gif parcellations in a single run</span>
-</span><span id="__span-3-29"><a id="__codelineno-3-29" name="__codelineno-3-29" href="#__codelineno-3-29"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-30"><a id="__codelineno-3-30" name="__codelineno-3-30" href="#__codelineno-3-30"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-31"><a id="__codelineno-3-31" name="__codelineno-3-31" href="#__codelineno-3-31"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-32"><a id="__codelineno-3-32" name="__codelineno-3-32" href="#__codelineno-3-32"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-33"><a id="__codelineno-3-33" name="__codelineno-3-33" href="#__codelineno-3-33"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-34"><a id="__codelineno-3-34" name="__codelineno-3-34" href="#__codelineno-3-34"></a><span class="w">  </span>--parcellation<span class="w"> </span>freesurfer,gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-35"><a id="__codelineno-3-35" name="__codelineno-3-35" href="#__codelineno-3-35"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_both<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-36"><a id="__codelineno-3-36" name="__codelineno-3-36" href="#__codelineno-3-36"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
-</span><span id="__span-3-37"><a id="__codelineno-3-37" name="__codelineno-3-37" href="#__codelineno-3-37"></a>
-</span><span id="__span-3-38"><a id="__codelineno-3-38" name="__codelineno-3-38" href="#__codelineno-3-38"></a><span class="c1"># Full pipeline with Z-score computation</span>
-</span><span id="__span-3-39"><a id="__codelineno-3-39" name="__codelineno-3-39" href="#__codelineno-3-39"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-40"><a id="__codelineno-3-40" name="__codelineno-3-40" href="#__codelineno-3-40"></a><span class="w">  </span>--subject<span class="w"> </span>./patients.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-41"><a id="__codelineno-3-41" name="__codelineno-3-41" href="#__codelineno-3-41"></a><span class="w">  </span>--healthy-subjects<span class="w"> </span>./healthy.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-42"><a id="__codelineno-3-42" name="__codelineno-3-42" href="#__codelineno-3-42"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-43"><a id="__codelineno-3-43" name="__codelineno-3-43" href="#__codelineno-3-43"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-44"><a id="__codelineno-3-44" name="__codelineno-3-44" href="#__codelineno-3-44"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-45"><a id="__codelineno-3-45" name="__codelineno-3-45" href="#__codelineno-3-45"></a><span class="w">  </span>--demographics-csv<span class="w"> </span>./data/demographics.csv<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-46"><a id="__codelineno-3-46" name="__codelineno-3-46" href="#__codelineno-3-46"></a><span class="w">  </span>--covariates<span class="w"> </span>age,sex<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-47"><a id="__codelineno-3-47" name="__codelineno-3-47" href="#__codelineno-3-47"></a><span class="w">  </span>--poly-terms<span class="w"> </span>age:2<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-48"><a id="__codelineno-3-48" name="__codelineno-3-48" href="#__codelineno-3-48"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_zscore<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-49"><a id="__codelineno-3-49" name="__codelineno-3-49" href="#__codelineno-3-49"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Single subject, default freesurfer parcellation</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--t1<span class="w">    </span>./data/sub-001/T1/scan.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--flair<span class="w"> </span>./data/sub-001/FLAIR/scan.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--dwi<span class="w">   </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a><span class="c1"># Multiple subjects, SGE cluster, freesurfer parcellation</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-14"><a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-15"><a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-16"><a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+</span><span id="__span-5-17"><a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a>
+</span><span id="__span-5-18"><a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a><span class="c1"># GIF parcellation only</span>
+</span><span id="__span-5-19"><a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-20"><a id="__codelineno-5-20" name="__codelineno-5-20" href="#__codelineno-5-20"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-21"><a id="__codelineno-5-21" name="__codelineno-5-21" href="#__codelineno-5-21"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-22"><a id="__codelineno-5-22" name="__codelineno-5-22" href="#__codelineno-5-22"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-23"><a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-24"><a id="__codelineno-5-24" name="__codelineno-5-24" href="#__codelineno-5-24"></a><span class="w">  </span>--parcellation<span class="w"> </span>gif<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-25"><a id="__codelineno-5-25" name="__codelineno-5-25" href="#__codelineno-5-25"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_gif<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-26"><a id="__codelineno-5-26" name="__codelineno-5-26" href="#__codelineno-5-26"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+</span><span id="__span-5-27"><a id="__codelineno-5-27" name="__codelineno-5-27" href="#__codelineno-5-27"></a>
+</span><span id="__span-5-28"><a id="__codelineno-5-28" name="__codelineno-5-28" href="#__codelineno-5-28"></a><span class="c1"># Both freesurfer and gif parcellations in a single run</span>
+</span><span id="__span-5-29"><a id="__codelineno-5-29" name="__codelineno-5-29" href="#__codelineno-5-29"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-30"><a id="__codelineno-5-30" name="__codelineno-5-30" href="#__codelineno-5-30"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-31"><a id="__codelineno-5-31" name="__codelineno-5-31" href="#__codelineno-5-31"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-32"><a id="__codelineno-5-32" name="__codelineno-5-32" href="#__codelineno-5-32"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-33"><a id="__codelineno-5-33" name="__codelineno-5-33" href="#__codelineno-5-33"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-34"><a id="__codelineno-5-34" name="__codelineno-5-34" href="#__codelineno-5-34"></a><span class="w">  </span>--parcellation<span class="w"> </span>freesurfer,gif<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-35"><a id="__codelineno-5-35" name="__codelineno-5-35" href="#__codelineno-5-35"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_both<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-36"><a id="__codelineno-5-36" name="__codelineno-5-36" href="#__codelineno-5-36"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+</span><span id="__span-5-37"><a id="__codelineno-5-37" name="__codelineno-5-37" href="#__codelineno-5-37"></a>
+</span><span id="__span-5-38"><a id="__codelineno-5-38" name="__codelineno-5-38" href="#__codelineno-5-38"></a><span class="c1"># Full pipeline with Z-score computation</span>
+</span><span id="__span-5-39"><a id="__codelineno-5-39" name="__codelineno-5-39" href="#__codelineno-5-39"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-40"><a id="__codelineno-5-40" name="__codelineno-5-40" href="#__codelineno-5-40"></a><span class="w">  </span>--subject<span class="w"> </span>./patients.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-41"><a id="__codelineno-5-41" name="__codelineno-5-41" href="#__codelineno-5-41"></a><span class="w">  </span>--healthy-subjects<span class="w"> </span>./healthy.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-42"><a id="__codelineno-5-42" name="__codelineno-5-42" href="#__codelineno-5-42"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-43"><a id="__codelineno-5-43" name="__codelineno-5-43" href="#__codelineno-5-43"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-44"><a id="__codelineno-5-44" name="__codelineno-5-44" href="#__codelineno-5-44"></a><span class="w">  </span>--dwi<span class="w">   </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-45"><a id="__codelineno-5-45" name="__codelineno-5-45" href="#__codelineno-5-45"></a><span class="w">  </span>--demographics-csv<span class="w"> </span>./data/demographics.csv<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-46"><a id="__codelineno-5-46" name="__codelineno-5-46" href="#__codelineno-5-46"></a><span class="w">  </span>--covariates<span class="w"> </span>age,sex<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-47"><a id="__codelineno-5-47" name="__codelineno-5-47" href="#__codelineno-5-47"></a><span class="w">  </span>--poly-terms<span class="w"> </span>age:2<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-48"><a id="__codelineno-5-48" name="__codelineno-5-48" href="#__codelineno-5-48"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs_zscore<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-49"><a id="__codelineno-5-49" name="__codelineno-5-49" href="#__codelineno-5-49"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>

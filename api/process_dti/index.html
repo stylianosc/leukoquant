@@ -775,6 +775,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#config-file-config-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file (--config-yaml)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1134,7 +1145,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td><code>-i</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
@@ -1142,7 +1153,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td>—</td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>DWI NIfTI (or <code>.zip</code> DICOM archive) file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1182,7 +1193,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td><code>-o</code></td>
 <td><code>path</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Root output directory for DTI results</td>
 </tr>
 <tr>
@@ -1202,6 +1213,22 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td>Number of Snakemake cores</td>
 </tr>
 <tr>
+<td><code>--config-yaml</code></td>
+<td>—</td>
+<td><code>path</code></td>
+<td><code>None</code></td>
+<td>No</td>
+<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>—</td>
+<td>flag</td>
+<td><code>False</code></td>
+<td>No</td>
+<td>Force-rerun DTI fitting even if outputs already exist</td>
+</tr>
+<tr>
 <td><code>--verbose</code></td>
 <td><code>-v</code></td>
 <td>flag</td>
@@ -1211,6 +1238,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 </tbody>
 </table>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1230,6 +1258,70 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 </tbody>
 </table>
+<h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
+<p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--dwi</code>, and <code>--output-dir</code>
+may be supplied by a YAML file. <strong>CLI flags always take priority</strong> over the
+equivalent YAML key when both are given — the YAML file only fills in
+whatever the CLI left unset.</p>
+<p>Recognized keys:</p>
+<table>
+<thead>
+<tr>
+<th>YAML key</th>
+<th>Equivalent flag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code> (or <code>subject_input</code>)</td>
+<td><code>--subject</code></td>
+</tr>
+<tr>
+<td><code>dwi</code> (or <code>dwi_pattern</code>)</td>
+<td><code>--dwi</code></td>
+</tr>
+<tr>
+<td><code>bvecs</code> (or <code>bvecs_pattern</code>)</td>
+<td><code>--bvecs</code></td>
+</tr>
+<tr>
+<td><code>bvals</code> (or <code>bvals_pattern</code>)</td>
+<td><code>--bvals</code></td>
+</tr>
+<tr>
+<td><code>mask_pattern</code></td>
+<td><code>--mask</code></td>
+</tr>
+<tr>
+<td><code>skull_strip</code></td>
+<td><code>--skull-strip</code></td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td><code>--output-dir</code></td>
+</tr>
+<tr>
+<td><code>scheduler</code></td>
+<td><code>--scheduler</code></td>
+</tr>
+<tr>
+<td><code>cores</code></td>
+<td><code>--cores</code></td>
+</tr>
+<tr>
+<td><code>keep_intermediate</code></td>
+<td><em>(no CLI equivalent — YAML-only)</em></td>
+</tr>
+</tbody>
+</table>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># dti_config.yaml</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./subjects.txt</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">dwi</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/DWI/I*.zip&quot;</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./outputs</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span>--config-yaml<span class="w"> </span>dti_config.yaml
+</span></code></pre></div>
 <h2 id="returns">Returns<a class="headerlink" href="#returns" title="Permanent link">&para;</a></h2>
 <p><code>dict</code> with keys:</p>
 <table>
@@ -1266,37 +1358,37 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
   container image.</li>
 </ul>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>{output_dir}/
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>└── {subject}/
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    └── dti/
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        └── outputs/
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>            ├── fa.nii.gz    ← fractional anisotropy
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>            ├── md.nii.gz    ← mean diffusivity
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>            ├── rd.nii.gz    ← radial diffusivity
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>            ├── ad.nii.gz    ← axial diffusivity
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>            └── ...
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>{output_dir}/
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>└── {subject}/
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    └── dti/
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>        └── outputs/
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>            ├── fa.nii.gz    ← fractional anisotropy
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>            ├── md.nii.gz    ← mean diffusivity
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>            ├── rd.nii.gz    ← radial diffusivity
+</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a>            ├── ad.nii.gz    ← axial diffusivity
+</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>            └── ...
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Single subject, no mask</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--dwi<span class="w"> </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="c1"># Multiple subjects, auto skull-strip, SGE</span>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span>--dwi<span class="w"> </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span>--skull-strip<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="c1"># Explicit brain mask</span>
-</span><span id="__span-2-16"><a id="__codelineno-2-16" name="__codelineno-2-16" href="#__codelineno-2-16"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-17"><a id="__codelineno-2-17" name="__codelineno-2-17" href="#__codelineno-2-17"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-18"><a id="__codelineno-2-18" name="__codelineno-2-18" href="#__codelineno-2-18"></a><span class="w">  </span>--dwi<span class="w"> </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-19"><a id="__codelineno-2-19" name="__codelineno-2-19" href="#__codelineno-2-19"></a><span class="w">  </span>--mask<span class="w"> </span>./data/sub-001/mask.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-20"><a id="__codelineno-2-20" name="__codelineno-2-20" href="#__codelineno-2-20"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Single subject, no mask</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--dwi<span class="w"> </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a><span class="c1"># Multiple subjects, auto skull-strip, SGE</span>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span>--dwi<span class="w"> </span><span class="s2">&quot;./data/{subject}/DWI/I*.zip&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span>--skull-strip<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="c1"># Explicit brain mask</span>
+</span><span id="__span-4-16"><a id="__codelineno-4-16" name="__codelineno-4-16" href="#__codelineno-4-16"></a>leukoquant<span class="w"> </span>process-dti<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-17"><a id="__codelineno-4-17" name="__codelineno-4-17" href="#__codelineno-4-17"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-18"><a id="__codelineno-4-18" name="__codelineno-4-18" href="#__codelineno-4-18"></a><span class="w">  </span>--dwi<span class="w"> </span>./data/sub-001/DWI/data.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-19"><a id="__codelineno-4-19" name="__codelineno-4-19" href="#__codelineno-4-19"></a><span class="w">  </span>--mask<span class="w"> </span>./data/sub-001/mask.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-20"><a id="__codelineno-4-20" name="__codelineno-4-20" href="#__codelineno-4-20"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>

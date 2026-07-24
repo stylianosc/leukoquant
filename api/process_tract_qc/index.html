@@ -887,6 +887,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#config-file-config-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file (--config-yaml)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1133,7 +1144,7 @@ running <code>process-metrics</code>.</p>
 <td>—</td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
@@ -1141,7 +1152,7 @@ running <code>process-metrics</code>.</p>
 <td>—</td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Tractography pattern: <code>base:glob:space</code>. Must point to the parcellation-specific subfolder (e.g. <code>tracula-freesurfer/outputs</code>).</td>
 </tr>
 <tr>
@@ -1169,6 +1180,22 @@ running <code>process-metrics</code>.</p>
 <td>Number of Snakemake cores</td>
 </tr>
 <tr>
+<td><code>--config-yaml</code></td>
+<td>—</td>
+<td><code>path</code></td>
+<td><code>None</code></td>
+<td>No</td>
+<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>—</td>
+<td>flag</td>
+<td><code>False</code></td>
+<td>No</td>
+<td>Force-rerun tract QC even if outputs already exist</td>
+</tr>
+<tr>
 <td><code>--verbose</code></td>
 <td><code>-v</code></td>
 <td>flag</td>
@@ -1178,6 +1205,7 @@ running <code>process-metrics</code>.</p>
 </tr>
 </tbody>
 </table>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1197,6 +1225,51 @@ running <code>process-metrics</code>.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
+<p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--tractography-path</code>, and
+<code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
+priority</strong> over the equivalent YAML key when both are given — the YAML file
+only fills in whatever the CLI left unset.</p>
+<p>Recognized keys:</p>
+<table>
+<thead>
+<tr>
+<th>YAML key</th>
+<th>Equivalent flag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code></td>
+<td><code>--subject</code></td>
+</tr>
+<tr>
+<td><code>tractography_path</code></td>
+<td><code>--tractography-path</code></td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td><code>--output-dir</code></td>
+</tr>
+<tr>
+<td><code>scheduler</code></td>
+<td><code>--scheduler</code></td>
+</tr>
+<tr>
+<td><code>cores</code></td>
+<td><code>--cores</code></td>
+</tr>
+</tbody>
+</table>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># tract_qc_config.yaml</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./subjects.txt</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="nt">tractography_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;$TRACULA_OUT/{subject}/tracula-freesurfer/outputs:dpath/*/path.pd.nii.gz:dwi&quot;</span>
+</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./tract_qc_outputs</span>
+</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
+</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="nt">cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span>--config-yaml<span class="w"> </span>tract_qc_config.yaml
+</span></code></pre></div>
 <h2 id="returns">Returns<a class="headerlink" href="#returns" title="Permanent link">&para;</a></h2>
 <p><code>dict</code> with keys:</p>
 <table>
@@ -1236,29 +1309,29 @@ running <code>process-metrics</code>.</p>
   metrics should be excluded from downstream analysis.</li>
 </ul>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>{output_dir}/
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>└── {subject}/
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>    └── tract_qc/
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>        ├── outputs/
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a>        │   └── qc_report.csv
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>        └── logs/
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>            ├── tract_qc_log.txt
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a>            └── tract_qc_error.txt
+<div class="language-text highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>{output_dir}/
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>└── {subject}/
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a>    └── tract_qc/
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a>        ├── outputs/
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a>        │   └── qc_report.csv
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a>        └── logs/
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>            ├── tract_qc_log.txt
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a>            └── tract_qc_error.txt
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="c1"># Multi-subject, freesurfer tractography</span>
-</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--tractography-path<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$TRACULA_OUT</span><span class="s2">/{subject}/tracula-freesurfer/outputs:dpath/*/path.pd.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./tract_qc_outputs<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge<span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span>
-</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>
-</span><span id="__span-3-8"><a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="c1"># Multi-subject, gif tractography</span>
-</span><span id="__span-3-9"><a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-10"><a id="__codelineno-3-10" name="__codelineno-3-10" href="#__codelineno-3-10"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-11"><a id="__codelineno-3-11" name="__codelineno-3-11" href="#__codelineno-3-11"></a><span class="w">  </span>--tractography-path<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$GIF_OUT</span><span class="s2">/{subject}/tracula-gif/outputs:dpath/*/path.pd.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-12"><a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a><span class="w">  </span>--output-dir<span class="w"> </span>./tract_qc_gif<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-3-13"><a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge<span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="c1"># Multi-subject, freesurfer tractography</span>
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--tractography-path<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$TRACULA_OUT</span><span class="s2">/{subject}/tracula-freesurfer/outputs:dpath/*/path.pd.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./tract_qc_outputs<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge<span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span>
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a><span class="c1"># Multi-subject, gif tractography</span>
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>leukoquant<span class="w"> </span>process-tract-qc<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-11"><a id="__codelineno-5-11" name="__codelineno-5-11" href="#__codelineno-5-11"></a><span class="w">  </span>--tractography-path<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$GIF_OUT</span><span class="s2">/{subject}/tracula-gif/outputs:dpath/*/path.pd.nii.gz:dwi&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-12"><a id="__codelineno-5-12" name="__codelineno-5-12" href="#__codelineno-5-12"></a><span class="w">  </span>--output-dir<span class="w"> </span>./tract_qc_gif<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-5-13"><a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge<span class="w"> </span>--cores<span class="w"> </span><span class="m">4</span>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>

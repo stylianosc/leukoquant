@@ -719,6 +719,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#config-file-config-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file (--config-yaml)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#returns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1246,6 +1257,24 @@ spec:</p>
 </tbody>
 </table>
 <p>Example: <code>./tracula_out/{subject}/tracula-freesurfer/outputs:dpath/*/path.pd.nii.gz:dwi</code></p>
+<h3 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h3>
+<p>Every command accepts an optional <code>--config-yaml &lt;path&gt;</code> pointing to a YAML
+file that supplies default values for its arguments. This is convenient for
+complex, multi-flag invocations you want to save and re-run, or for
+CI/scripted usage where writing a file is cleaner than a long command line.</p>
+<p><strong>Precedence: CLI flags always win.</strong> A <code>--config-yaml</code> value is only used
+for an argument that was <em>not</em> also given on the command line — it never
+overrides an explicit CLI flag. This lets you keep a shared config file for a
+dataset and override just one or two values per invocation:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span>--config-yaml<span class="w"> </span>my_config.yaml<span class="w"> </span>--output-dir<span class="w"> </span>./run2
+</span></code></pre></div>
+<p>YAML keys generally match the long-form flag name with dashes replaced by
+underscores (e.g. <code>--tractography-path</code> → <code>tractography_path</code>). Most
+commands also accept a shorter alias matching the flag itself (e.g. <code>t1</code> as
+well as <code>t1_pattern</code>) — each command's page lists its exact recognized keys
+under its own "Config file" section.</p>
+<p>A <code>--config-yaml</code> path that doesn't exist raises an error immediately; a
+command is never silently run with an unintended file.</p>
 <h3 id="returns">Returns<a class="headerlink" href="#returns" title="Permanent link">&para;</a></h3>
 <p>All commands return a Python <code>dict</code> with at minimum:</p>
 <table>

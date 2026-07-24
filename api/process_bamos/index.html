@@ -719,6 +719,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#config-file-config-yaml" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Config file (--config-yaml)
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#returns" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1140,7 +1151,7 @@ to guide the segmentation.</p>
 <td><code>-i</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
@@ -1148,7 +1159,7 @@ to guide the segmentation.</p>
 <td><code>-f</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>FLAIR NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1156,7 +1167,7 @@ to guide the segmentation.</p>
 <td><code>-t</code></td>
 <td><code>str</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>T1 NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
@@ -1172,7 +1183,7 @@ to guide the segmentation.</p>
 <td><code>-o</code></td>
 <td><code>path</code></td>
 <td>—</td>
-<td><strong>Yes</strong></td>
+<td><strong>Yes</strong>*</td>
 <td>Root output directory</td>
 </tr>
 <tr>
@@ -1192,6 +1203,22 @@ to guide the segmentation.</p>
 <td>Number of Snakemake cores</td>
 </tr>
 <tr>
+<td><code>--config-yaml</code></td>
+<td>—</td>
+<td><code>path</code></td>
+<td><code>None</code></td>
+<td>No</td>
+<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+</tr>
+<tr>
+<td><code>--force</code></td>
+<td>—</td>
+<td>flag</td>
+<td><code>False</code></td>
+<td>No</td>
+<td>Force-rerun BaMoS lesion detection even if outputs already exist</td>
+</tr>
+<tr>
 <td><code>--verbose</code></td>
 <td><code>-v</code></td>
 <td>flag</td>
@@ -1201,6 +1228,7 @@ to guide the segmentation.</p>
 </tr>
 </tbody>
 </table>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1220,6 +1248,64 @@ to guide the segmentation.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
+<p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--flair</code>, <code>--t1</code>, and
+<code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
+priority</strong> over the equivalent YAML key when both are given — the YAML file
+only fills in whatever the CLI left unset.</p>
+<p>Recognized keys:</p>
+<table>
+<thead>
+<tr>
+<th>YAML key</th>
+<th>Equivalent flag</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>subject</code> (or <code>subject_input</code>)</td>
+<td><code>--subject</code></td>
+</tr>
+<tr>
+<td><code>flair</code> (or <code>flair_pattern</code>)</td>
+<td><code>--flair</code></td>
+</tr>
+<tr>
+<td><code>t1</code> (or <code>t1_pattern</code>)</td>
+<td><code>--t1</code></td>
+</tr>
+<tr>
+<td><code>gif_results_pattern</code></td>
+<td><code>--gif-results-dir</code></td>
+</tr>
+<tr>
+<td><code>output_dir</code></td>
+<td><code>--output-dir</code></td>
+</tr>
+<tr>
+<td><code>scheduler</code></td>
+<td><code>--scheduler</code></td>
+</tr>
+<tr>
+<td><code>cores</code></td>
+<td><code>--cores</code></td>
+</tr>
+<tr>
+<td><code>keep_intermediate</code></td>
+<td><em>(no CLI equivalent — YAML-only)</em></td>
+</tr>
+</tbody>
+</table>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># bamos_config.yaml</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./subjects.txt</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">flair</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="nt">t1</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span>
+</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="nt">gif_results_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./gif_outputs/{subject}/gif/outputs&quot;</span>
+</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./outputs</span>
+</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
+</span></code></pre></div>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span>--config-yaml<span class="w"> </span>bamos_config.yaml
+</span></code></pre></div>
 <h2 id="returns">Returns<a class="headerlink" href="#returns" title="Permanent link">&para;</a></h2>
 <p><code>dict</code> with keys:</p>
 <table>
@@ -1257,30 +1343,30 @@ to guide the segmentation.</p>
   the primary input for <code>process-metrics</code> <code>--lesion-path</code>.</li>
 </ul>
 <h2 id="output-structure">Output structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>{output_dir}/
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>└── {subject}/
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    └── bamos/
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>        └── outputs/
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>            ├── CorrectLesion_*.nii.gz   ← corrected WMH mask (T1 space)
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>            ├── Lesion_*.nii.gz
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>            └── ...
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>{output_dir}/
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>└── {subject}/
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    └── bamos/
+</span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>        └── outputs/
+</span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>            ├── CorrectLesion_*.nii.gz   ← corrected WMH mask (T1 space)
+</span><span id="__span-3-6"><a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>            ├── Lesion_*.nii.gz
+</span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>            └── ...
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># Standalone — GIF runs internally</span>
-</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-4"><a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="w">  </span>--flair<span class="w"> </span>./data/sub-001/FLAIR/scan.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-5"><a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="w">  </span>--t1<span class="w">    </span>./data/sub-001/T1/scan.nii.gz<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-6"><a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
-</span><span id="__span-2-7"><a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a>
-</span><span id="__span-2-8"><a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># Reuse existing GIF output (multi-subject, SGE)</span>
-</span><span id="__span-2-9"><a id="__codelineno-2-9" name="__codelineno-2-9" href="#__codelineno-2-9"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-10"><a id="__codelineno-2-10" name="__codelineno-2-10" href="#__codelineno-2-10"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-11"><a id="__codelineno-2-11" name="__codelineno-2-11" href="#__codelineno-2-11"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-12"><a id="__codelineno-2-12" name="__codelineno-2-12" href="#__codelineno-2-12"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-13"><a id="__codelineno-2-13" name="__codelineno-2-13" href="#__codelineno-2-13"></a><span class="w">  </span>--gif-results-dir<span class="w"> </span><span class="s2">&quot;./gif_outputs/{subject}/gif/outputs&quot;</span><span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-14"><a id="__codelineno-2-14" name="__codelineno-2-14" href="#__codelineno-2-14"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
-</span><span id="__span-2-15"><a id="__codelineno-2-15" name="__codelineno-2-15" href="#__codelineno-2-15"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Standalone — GIF runs internally</span>
+</span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--flair<span class="w"> </span>./data/sub-001/FLAIR/scan.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>--t1<span class="w">    </span>./data/sub-001/T1/scan.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-6"><a id="__codelineno-4-6" name="__codelineno-4-6" href="#__codelineno-4-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs
+</span><span id="__span-4-7"><a id="__codelineno-4-7" name="__codelineno-4-7" href="#__codelineno-4-7"></a>
+</span><span id="__span-4-8"><a id="__codelineno-4-8" name="__codelineno-4-8" href="#__codelineno-4-8"></a><span class="c1"># Reuse existing GIF output (multi-subject, SGE)</span>
+</span><span id="__span-4-9"><a id="__codelineno-4-9" name="__codelineno-4-9" href="#__codelineno-4-9"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-10"><a id="__codelineno-4-10" name="__codelineno-4-10" href="#__codelineno-4-10"></a><span class="w">  </span>--subject<span class="w"> </span>./subjects.txt<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-11"><a id="__codelineno-4-11" name="__codelineno-4-11" href="#__codelineno-4-11"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">&quot;./data/{subject}/FLAIR/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-12"><a id="__codelineno-4-12" name="__codelineno-4-12" href="#__codelineno-4-12"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">&quot;./data/{subject}/T1/I*.nii.gz&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-13"><a id="__codelineno-4-13" name="__codelineno-4-13" href="#__codelineno-4-13"></a><span class="w">  </span>--gif-results-dir<span class="w"> </span><span class="s2">&quot;./gif_outputs/{subject}/gif/outputs&quot;</span><span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-14"><a id="__codelineno-4-14" name="__codelineno-4-14" href="#__codelineno-4-14"></a><span class="w">  </span>--output-dir<span class="w"> </span>./outputs<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-4-15"><a id="__codelineno-4-15" name="__codelineno-4-15" href="#__codelineno-4-15"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
