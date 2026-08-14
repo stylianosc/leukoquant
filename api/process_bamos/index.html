@@ -1119,19 +1119,36 @@
 <p><code>process-bamos</code> segments white matter hyperintensities from FLAIR (and T1)
 images using the BaMoS algorithm.  BaMoS requires a brain parcellation from GIF
 to guide the segmentation.</p>
-<p>There are two modes of operation:</p>
+<p>There are two modes of operation, and they can be mixed within the same
+batch:</p>
 <ol>
 <li>
-<p><strong>Standalone</strong> — omit <code>--gif-results-dir</code>.  GIF is run internally on the
-   provided <code>--t1</code> / <code>--flair</code> images before BaMoS executes.  Useful when GIF
-   has not been run previously.</p>
+<p><strong>Standalone</strong> — omit <code>--gif-results-dir</code> (or a given subject's
+   <code>{subject}</code> pattern doesn't match anything). GIF is run internally on
+   that subject's <code>--t1</code> / <code>--flair</code> images before BaMoS executes. Requires
+   a local GIF installation (bundled, or via <code>GIF_HOME</code>) — see
+   <a href="../process_gif/"><code>process-gif</code></a>.</p>
 </li>
 <li>
 <p><strong>Reuse existing GIF output</strong> — provide <code>--gif-results-dir</code> pointing to a
-   directory that already contains a GIF parcellation (<code>*_NeuroMorph_Parcellation.nii.gz</code>).
-   GIF is skipped and only BaMoS runs.  This is significantly faster.</p>
+   directory containing four files, matched loosely by substring:
+   <code>*_NeuroMorph_Parcellation.nii.gz</code>, <code>*_NeuroMorph_Segmentation.nii.gz</code>,
+   <code>*_NeuroMorph_prior.nii.gz</code>, and <code>*TIV*</code>. These don't need to come from
+   this tool's own GIF run — any GIF output with files matching those
+   patterns works, including one produced independently by someone else.
+   GIF is skipped for that subject and only BaMoS runs. If the directory's
+   parcellation file doesn't match the expected naming, <code>process-bamos</code>
+   fails immediately with a clear error rather than a confusing downstream
+   failure.</p>
 </li>
 </ol>
+<p><strong>Mixed batches</strong>: for a multi-subject run, each subject is resolved
+independently — some may have matching <code>--gif-results-dir</code> results while
+others fall back to standalone mode. A subject with no matching directory
+and no available GIF installation is skipped with a warning (not treated as
+a fatal error for the whole batch); the rest of the batch still runs. If
+<em>every</em> subject ends up unprocessable this way, the command fails with a
+clear error before submitting anything.</p>
 <p>Outputs are written to <code>{output_dir}/{subject}/bamos/outputs/</code>.</p>
 <h2 id="parameters">Parameters<a class="headerlink" href="#parameters" title="Permanent link">&para;</a></h2>
 <table>
@@ -1176,7 +1193,7 @@ to guide the segmentation.</p>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>Directory containing a prior GIF output, or <code>{subject}</code> glob pattern. When omitted, GIF runs internally.</td>
+<td>Directory containing a prior GIF output, or <code>{subject}</code> glob pattern. Subjects without a match fall back to running GIF internally (or are skipped with a warning if no GIF installation is available).</td>
 </tr>
 <tr>
 <td><code>--output-dir</code></td>
@@ -1339,6 +1356,10 @@ only fills in whatever the CLI left unset.</p>
 <li><code>--gif-results-dir</code> can be a pattern such as
   <code>./gif_outputs/{subject}/gif/outputs</code> — the <code>{subject}</code> placeholder is
   substituted per-subject.</li>
+<li>A GIF installation (bundled, or <code>GIF_HOME</code>) is only required if at least
+  one subject in the batch actually needs GIF run internally. A batch
+  where every subject supplies matching <code>--gif-results-dir</code> results never
+  needs one.</li>
 <li>The corrected lesion mask (<code>CorrectLesion_*.nii.gz</code>) is in T1 space and is
   the primary input for <code>process-metrics</code> <code>--lesion-path</code>.</li>
 </ul>
