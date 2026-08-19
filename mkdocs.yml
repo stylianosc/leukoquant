@@ -1,0 +1,75 @@
+site_name: LeukoQuant
+site_description: Lesion-informed white matter damage metrics toolkit for cerebral small vessel disease
+site_url: https://stylianosc.github.io/leukoquant/
+repo_url: https://github.com/stylianosc/leukoquant
+repo_name: stylianosc/leukoquant
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.top
+    - toc.integrate
+    - content.code.copy
+    - content.code.annotate
+    - search.highlight
+    - search.suggest
+
+nav:
+  - Home: index.md
+  - User Guide: user_guide.md
+  - Examples: examples_guide.md
+  - Output Structure: output_structure.md
+  - API Reference:
+      - Overview: api/index.md
+      - process-gif: api/process_gif.md
+      - process-bamos: api/process_bamos.md
+      - process-recon: api/process_recon.md
+      - process-dti: api/process_dti.md
+      - process-noddi: api/process_noddi.md
+      - process-tracula: api/process_tracula.md
+      - process-metrics: api/process_metrics.md
+      - process-tract-qc: api/process_tract_qc.md
+      - process-zscore: api/process_zscore.md
+      - process-atlas-conversion: api/process_atlas_conversion.md
+      - process-all: api/process_all.md
+  - Citations: citations.md
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.snippets
+  - tables
+  - toc:
+      permalink: true
+  - attr_list
+  - md_in_html
+
+plugins:
+  - search
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/stylianosc/leukoquant

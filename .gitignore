@@ -1,0 +1,85 @@
+# Python build artifacts
+*.egg-info/
+dist/
+build/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Snakemake
+.snakemake/
+leukoquant/workflow/workflows/.snakemake
+
+# Nextflow
+.nextflow*
+
+# Logs
+*.log*
+leukoquant/workflow/workflows/logs
+
+# Large / generated data files
+*.nii.gz
+*.mgz
+*.sif
+*combined_metrics_results.csv
+
+# Licenses - kept locally, never committed (but track the empty directory)
+leukoquant/licenses/*
+!leukoquant/licenses/.gitkeep
+leukoquant/external/gif/GIF/
+
+# Project-specific exclusions
+Code
+data
+NOTES
+examples
+gif_anonymisation_experiment
+leukoquant/workflow/licenses/*
+leukoquant/external/bamos/NiftySeg_0.9.4/
+leukoquant/external/bamos/seg-apps-old
+
+# Hidden subdirectory contents (e.g. .snakemake inside subdirs)
+*/.*/*
+*.log
+leukoquant/scripts/*
+leukoquant/workflow/scripts/*
+useful_commands.txt
+
+# Internal-use validation scripts and tests - not for public repo
+testing/
+
+# Internal project notes and planning
+notes/
+tracula_status.md
+TASK_TRACKER.md
+
+# Private extension modules (own repo: leukoquant-extra), not part of
+# either leukoquant remote (private or public) - see
+# leukoquant/utils/metrics_calc.py's optional-extension loader.
+leukoquant/utils/extra/
+
+# Safety net: never accidentally commit credentials or real subject/clinical
+# data (this repo's own code only ever reads these from paths outside the
+# repo or from environment variables -- see container_utils.py, HF_TOKEN).
+.hftoken
+*.token
+.env
+.env.*
+clinical_data*.csv
+demographics*.csv
+*_subjects_*.txt
+!leukoquant/tests/**/*subjects*.txt

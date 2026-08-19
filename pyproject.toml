@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=65.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "leukoquant"
+version = "1.5.0"
+description = "Lesion-informed white matter damage metrics toolkit for cerebral small vessel disease"
+readme = "README.md"
+license = {file = "LICENSE"}
+authors = [
+    {name = "Stylianos Charalampous", email = "stylianosc@users.noreply.github.com"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Scientific/Engineering :: Medical Science Apps.",
+    "Topic :: Scientific/Engineering :: Image Processing",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "click==8.3.0",
+    "PyYAML==6.0.2",
+    "snakemake==9.20.0",
+    "snakemake_interface_executor_plugins==9.4.0",
+    "huggingface_hub==1.14.0",
+    "snakemake-executor-plugin-sge==0.6.24",
+    "numpy==1.26.4",
+    "pandas==2.2.3",
+]
+
+[project.urls]
+Homepage = "https://stylianosc.github.io/leukoquant/"
+Documentation = "https://stylianosc.github.io/leukoquant/"
+Repository = "https://github.com/stylianosc/leukoquant"
+Issues = "https://github.com/stylianosc/leukoquant/issues"
+Changelog = "https://github.com/stylianosc/leukoquant/blob/main/CHANGELOG.md"
+"Release Notes" = "https://github.com/stylianosc/leukoquant/releases/tag/v1.0.0"
+
+[project.scripts]
+leukoquant = "leukoquant.cli.main:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov>=2.0",
+    "black>=22.0",
+    "flake8>=4.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["leukoquant*"]
+
+[tool.setuptools.package-data]
+leukoquant = [
+    "mappings/*",
+    "external/**/*",
+    "workflow/**/*",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310"]
+
+[tool.pytest.ini_options]
+testpaths = ["leukoquant/tests"]
+python_files = "test_*.py"
+addopts = "--strict-markers -v"
+markers = [
+    "unit: unit tests (fast, no I/O)",
+    "integration: integration tests (may be slow)",
+    "smoke: smoke tests (basic functionality)",
+]

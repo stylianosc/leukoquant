@@ -1,0 +1,86 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+type: software
+title: "LeukoQuant: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease"
+version: 1.5.0
+date-released: 2026-08-19
+license: Apache-2.0
+doi: 10.5281/zenodo.22012619
+repository-code: "https://github.com/stylianosc/leukoquant"
+url: "https://stylianosc.github.io/leukoquant/"
+authors:
+  - family-names: Charalampous
+    given-names: Stylianos
+    affiliation: "University College London"
+    orcid: "https://orcid.org/0000-0002-2523-1468"
+  - family-names: Barkhof
+    given-names: Frederik
+    affiliation: "University College London"
+    orcid: "https://orcid.org/0000-0003-3543-3706"
+  - family-names: Cardoso
+    given-names: "M. Jorge"
+    affiliation: "King's College London"
+    orcid: "https://orcid.org/0000-0003-1284-2558"
+  - family-names: Sudre
+    given-names: Carole
+    affiliation: "University College London"
+    orcid: "https://orcid.org/0000-0001-5753-428X"
+keywords:
+  - neuroimaging
+  - white matter hyperintensities
+  - cerebral small vessel disease
+  - diffusion MRI
+  - tractography
+  - lesion segmentation
+abstract: >
+  leukoquant is a neuroimaging pipeline for lesion-informed white matter damage
+  analysis in cerebral small vessel disease (CSVD). It combines brain
+  parcellation, white matter hyperintensity (WMH) segmentation, tractography, diffusion MRI modelling (DTI, NODDI), and tract-level metric extraction into a unified CLI toolkit.
+references:
+  - type: article
+    title: "Bayesian model selection for pathological neuroimaging data applied to white matter lesion segmentation"
+    authors:
+      - family-names: Sudre
+        given-names: "Carole H."
+      - family-names: Cardoso
+        given-names: "M. Jorge"
+      - family-names: Bouvy
+        given-names: "Willem H."
+      - family-names: Biessels
+        given-names: "Geert Jan"
+      - family-names: Barnes
+        given-names: Josephine
+      - family-names: Ourselin
+        given-names: Sébastien
+    journal: "IEEE Transactions on Medical Imaging"
+    volume: 34
+    issue: 10
+    start: "2079"
+    end: "2102"
+    year: 2015
+    doi: "10.1109/TMI.2015.2419072"
+    notes: "BaMoS -- used for white matter hyperintensity segmentation."
+  - type: article
+    title: "Global image registration using a symmetric block-matching approach"
+    authors:
+      - family-names: Modat
+        given-names: Marc
+    journal: "Journal of Medical Imaging"
+    volume: 1
+    issue: 2
+    year: 2014
+    doi: "10.1117/1.JMI.1.2.024003"
+    notes: "NiftyReg -- cite for rigid/affine registration use."
+  - type: article
+    title: "Fast free-form deformation using graphics processing units"
+    authors:
+      - family-names: Modat
+        given-names: Marc
+    journal: "Computer Methods and Programs in Biomedicine"
+    volume: 98
+    issue: 3
+    start: "278"
+    end: "284"
+    year: 2010
+    doi: "10.1016/j.cmpb.2009.09.002"
+    notes: "NiftyReg -- cite for non-rigid registration use."

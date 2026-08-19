@@ -1,0 +1,46 @@
+# DmriRc template for TRACULA processing
+# This is a template file where the values enclosed in brackets will be replaced
+# by the TRACULA workflow before running trac-all.
+
+# T1 images and FreeSurfer segmentations are expected to be found here
+setenv SUBJECTS_DIR $subjects_dir
+
+# Output directory where trac-all results will be saved
+# Default: Same subjects SUBJECTS_DIR
+set dtroot = $output_dir_value
+
+
+# Subject IDs - each subject is listed once per DWI scan it contributes.
+# For N scans per session: subjlist repeats the subject ID N times.
+set subjlist = ( $subjlist_value )
+
+# Input DWI volumes (file names relative to dcmroot)
+# If original DICOMs don't exist, these can be in other image format
+# but then the gradient table and b-value table must be specified (see below)
+set dcmroot = $dcmroot_value
+
+# DWI input files (relative to dcmroot)
+set dcmlist = ( $dcmlist_value )
+
+# Input bvecs and bvals (relative to dcmroot)
+set bveclist = ( $bveclist_value )
+set bvallist = ( $bvallist_value )
+
+# Thalamic Nuclei segmentation from FreeSurfer
+# Must exist in each subject's FreeSurfer recon directory, under:
+#   SUBJECTS_DIR/subject/mri/ThalamicNuclei.v13.T1.FSvoxelSpace.mgz
+# 0: Do not use, 1: Use 
+set usethalnuc = $usethalnuc
+
+# Eddy-current and motion correction settings
+# 0: Skip, 1: FSL eddy_correct, 2: FSL eddy
+set doeddy = $doeddy
+
+# Reverse polarity correction
+set dob0 = $dob0
+
+set pedir = ( $pe_dir )
+
+set epifactor = ( $epi_factor )
+
+set echospacing = ( $echo_spacing )

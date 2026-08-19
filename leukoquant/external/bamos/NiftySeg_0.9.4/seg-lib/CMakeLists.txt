@@ -1,0 +1,140 @@
+#-----------------------------------------------------------------------------
+
+    SET(NAME _seg_tools)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp _seg_matrix.h)
+    TARGET_LINK_LIBRARIES(${NAME} _seg_FMM _seg_Topo _seg_nifti _seg_BiasCorrection)
+    INSTALL(TARGETS ${NAME}
+        RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+        LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+        ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+    INSTALL(FILES _seg_common.h DESTINATION include)
+    INSTALL(FILES _seg_matrix.h DESTINATION include)
+
+    SET(NAME _seg_MRF)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp _seg_common.h )
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_BiasCorrection)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_FMM)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_LoAd)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp)
+    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti _seg_tools _seg_FMM _seg_Topo _seg_MRF)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_EM)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp)
+    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti _seg_tools _seg_FMM _seg_Topo _seg_MRF)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_LabFusion)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp _seg_tools)
+    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti _seg_tools _seg_FMM _seg_Topo)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _seg_Topo)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+   INSTALL(FILES ${NAME}.h DESTINATION include)
+
+#    SET(NAME _TreeEM)
+#    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp _SVDCov.h _EigenvaluesCov.h)
+#    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti)
+#    INSTALL(TARGETS ${NAME}
+#            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+#            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+#            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+#    )
+#    INSTALL(FILES ${NAME}.h DESTINATION include)
+#    INSTALL(FILES _seg_matrix.h DESTINATION include)
+#    INSTALL(FILES _SVDCov.h DESTINATION include)
+#    INSTALL(FILES _EigenvalueCov.h DESTINATION include)
+
+    SET(NAME _TreeEM_new)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp _SVDCov.h _EigenvaluesCov.h)
+    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti _seg_tools)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _Seg_InitAndRun)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp )
+    TARGET_LINK_LIBRARIES(${NAME} _seg_nifti _seg_tools _TreeEM_new _DirichletPriors)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _DirichletPriors)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp )
+    TARGET_LINK_LIBRARIES(${NAME} _TreeEM_new)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+    SET(NAME _Seg_Analysis)
+    ADD_LIBRARY(${NAME} ${LIBRARY_TYPE} ${NAME}.h ${NAME}.cpp )
+    TARGET_LINK_LIBRARIES(${NAME} _seg_tools _seg_nifti _TreeEM_new _Seg_InitAndRun)
+    INSTALL(TARGETS ${NAME}
+            RUNTIME DESTINATION ${CMAKE_INSTALL_PREFIX}/bin
+            LIBRARY DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+            ARCHIVE DESTINATION ${CMAKE_INSTALL_PREFIX}/lib
+    )
+    INSTALL(FILES ${NAME}.h DESTINATION include)
+
+
+    INSTALL(FILES _seg_matrix.h DESTINATION include)
+    INSTALL(FILES _SVDCov.h DESTINATION include)
+    INSTALL(FILES _EigenvaluesCov.h DESTINATION include)
+
+
+
