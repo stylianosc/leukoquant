@@ -1148,10 +1148,10 @@
 reconstructs major white matter pathways constrained by a brain parcellation atlas.</p>
 <p>TRACULA requires:</p>
 <ol>
-<li><strong>DWI data</strong> (<code>--dwi</code>) — the diffusion-weighted images.</li>
-<li><strong>A brain parcellation</strong> — provided by either FreeSurfer <code>recon-all</code> or GIF,
+<li><strong>DWI data</strong> (<code>--dwi</code>) - the diffusion-weighted images.</li>
+<li><strong>A brain parcellation</strong> - provided by either FreeSurfer <code>recon-all</code> or GIF,
    selected via <code>--parcellation</code>.</li>
-<li><strong>A FreeSurfer reconstruction</strong> — either pre-computed (<code>--freesurfer-recon-dir</code>)
+<li><strong>A FreeSurfer reconstruction</strong> - either pre-computed (<code>--freesurfer-recon-dir</code>)
    or run automatically when <code>--t1</code> is provided and <code>--parcellation</code> includes <code>freesurfer</code>.</li>
 </ol>
 <h3 id="parcellation-modes">Parcellation modes<a class="headerlink" href="#parcellation-modes" title="Permanent link">&para;</a></h3>
@@ -1203,21 +1203,21 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 <td><code>--subject</code></td>
 <td><code>-s</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>**</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
 <td><code>--dwi</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>**</td>
 <td>DWI NIfTI (or <code>.zip</code> DICOM archive) file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
 <td><code>--bvecs</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1225,7 +1225,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--bvals</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1233,7 +1233,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--t1</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No*</td>
@@ -1241,7 +1241,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--freesurfer-recon-dir</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1249,7 +1249,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--parcellation</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>freesurfer</code></td>
 <td>No</td>
@@ -1257,7 +1257,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--brain-parcellation</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1267,13 +1267,13 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 <td><code>--output-dir</code></td>
 <td><code>-o</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>**</td>
 <td>Root output directory for TRACULA results</td>
 </tr>
 <tr>
 <td><code>--scratch</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1281,7 +1281,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--scheduler</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>choice</code></td>
 <td><code>local</code></td>
 <td>No</td>
@@ -1297,15 +1297,15 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1322,7 +1322,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 </tbody>
 </table>
 <p>* <code>--t1</code> is required when <code>recon-all</code> outputs are not already available.
-** Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+** Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="parcellation-options">Parcellation options<a class="headerlink" href="#parcellation-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1368,7 +1368,7 @@ reconstructs major white matter pathways constrained by a brain parcellation atl
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--dwi</code>, and <code>--output-dir</code>
 may be supplied by a YAML file. <strong>CLI flags always take priority</strong> over the
-equivalent YAML key when both are given — the YAML file only fills in
+equivalent YAML key when both are given - the YAML file only fills in
 whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1425,11 +1425,11 @@ whatever the CLI left unset.</p>
 </tr>
 <tr>
 <td><code>mapping_file</code></td>
-<td><em>(no CLI equivalent — YAML-only; required for non-freesurfer, non-gif custom parcellations)</em></td>
+<td><em>(no CLI equivalent - YAML-only; required for non-freesurfer, non-gif custom parcellations)</em></td>
 </tr>
 <tr>
 <td><code>keep_intermediate</code></td>
-<td><em>(no CLI equivalent — YAML-only)</em></td>
+<td><em>(no CLI equivalent - YAML-only)</em></td>
 </tr>
 </tbody>
 </table>
@@ -1545,11 +1545,11 @@ whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_gif/"><code>process-gif</code></a> — produces the GIF parcellation for <code>--parcellation gif</code></li>
-<li><a href="../process_recon/"><code>process-recon</code></a> — produces the recon-all outputs for <code>--freesurfer-recon-dir</code></li>
-<li><a href="../process_metrics/"><code>process-metrics</code></a> — computes metrics on TRACULA tract outputs</li>
-<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> — quality-controls TRACULA tract outputs</li>
-<li><a href="../process_all/"><code>process-all</code></a> — runs TRACULA as part of the full pipeline</li>
+<li><a href="../process_gif/"><code>process-gif</code></a> - produces the GIF parcellation for <code>--parcellation gif</code></li>
+<li><a href="../process_recon/"><code>process-recon</code></a> - produces the recon-all outputs for <code>--freesurfer-recon-dir</code></li>
+<li><a href="../process_metrics/"><code>process-metrics</code></a> - computes metrics on TRACULA tract outputs</li>
+<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> - quality-controls TRACULA tract outputs</li>
+<li><a href="../process_all/"><code>process-all</code></a> - runs TRACULA as part of the full pipeline</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/tracula_processor.py"><code>leukoquant/core/tracula_processor.py</code></a></p>

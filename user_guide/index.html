@@ -491,7 +491,7 @@
   <a href="#step-1-get-the-code" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 1 — Get the Code
+        Step 1 - Get the Code
       
     </span>
   </a>
@@ -502,12 +502,12 @@
   <a href="#step-2-platform-setup-one-time-per-machine" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 2 — Platform Setup (one-time per machine)
+        Step 2 - Platform Setup (one-time per machine)
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Step 2 — Platform Setup (one-time per machine)">
+    <nav class="md-nav" aria-label="Step 2 - Platform Setup (one-time per machine)">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -569,7 +569,7 @@
   <a href="#step-3-install-the-python-package-one-time-per-machine" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 3 — Install the Python Package (one-time per machine)
+        Step 3 - Install the Python Package (one-time per machine)
       
     </span>
   </a>
@@ -580,7 +580,7 @@
   <a href="#step-4-freesurfer-licence" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 4 — FreeSurfer Licence
+        Step 4 - FreeSurfer Licence
       
     </span>
   </a>
@@ -591,12 +591,12 @@
   <a href="#step-5-run" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Step 5 — Run
+        Step 5 - Run
       
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Step 5 — Run">
+    <nav class="md-nav" aria-label="Step 5 - Run">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1183,7 +1183,7 @@
   
 
 
-<h1 id="leukoquant-installation-user-guide">leukoquant — Installation &amp; User Guide<a class="headerlink" href="#leukoquant-installation-user-guide" title="Permanent link">&para;</a></h1>
+<h1 id="leukoquant-installation-user-guide">leukoquant - Installation &amp; User Guide<a class="headerlink" href="#leukoquant-installation-user-guide" title="Permanent link">&para;</a></h1>
 <hr />
 <h2 id="before-you-start">Before You Start<a class="headerlink" href="#before-you-start" title="Permanent link">&para;</a></h2>
 <table>
@@ -1207,42 +1207,42 @@
 </tr>
 <tr>
 <td>16 GB RAM</td>
-<td>—</td>
+<td>-</td>
 <td>Recommended</td>
 </tr>
 <tr>
 <td>50 GB free disk</td>
-<td>—</td>
+<td>-</td>
 <td>Containers + outputs</td>
 </tr>
 <tr>
 <td>FreeSurfer licence</td>
-<td>—</td>
+<td>-</td>
 <td>Required for <code>process-all</code> / <code>process-recon</code>. Free from <a href="https://surfer.nmr.mgh.harvard.edu/registration.html">surfer.nmr.mgh.harvard.edu</a></td>
 </tr>
 </tbody>
 </table>
-<p><strong>Windows only — install WSL2 first (one reboot required):</strong></p>
+<p><strong>Windows only - install WSL2 first (one reboot required):</strong></p>
 <div class="language-powershell highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c"># Run in PowerShell as Administrator, then reboot</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">wsl</span> <span class="p">-</span><span class="n">-install</span>
 </span></code></pre></div>
 <p>After reboot, open the <strong>Ubuntu</strong> app from the Start Menu for all steps below.</p>
 <hr />
-<h2 id="step-1-get-the-code">Step 1 — Get the Code<a class="headerlink" href="#step-1-get-the-code" title="Permanent link">&para;</a></h2>
+<h2 id="step-1-get-the-code">Step 1 - Get the Code<a class="headerlink" href="#step-1-get-the-code" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/stylianosc/leukoquant.git
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nb">cd</span><span class="w"> </span>leukoquant
 </span></code></pre></div>
 <p><strong>What this does:</strong> Downloads the LeukoQuant repository to your machine and enters the directory. All subsequent scripts must be run from this directory.</p>
 <hr />
-<h2 id="step-2-platform-setup-one-time-per-machine">Step 2 — Platform Setup (one-time per machine)<a class="headerlink" href="#step-2-platform-setup-one-time-per-machine" title="Permanent link">&para;</a></h2>
+<h2 id="step-2-platform-setup-one-time-per-machine">Step 2 - Platform Setup (one-time per machine)<a class="headerlink" href="#step-2-platform-setup-one-time-per-machine" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>bash<span class="w"> </span>setup_platform.sh
 </span></code></pre></div>
 <h3 id="linux">Linux<a class="headerlink" href="#linux" title="Permanent link">&para;</a></h3>
 <ol>
-<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH — if yes, exits immediately</li>
+<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH - if yes, exits immediately</li>
 <li><strong>No sudo + conda/mamba available:</strong> installs Apptainer via <code>conda-forge</code> (no root needed)</li>
 <li><strong>Has sudo:</strong> installs Apptainer from the official CIQ PPA via <code>apt-get</code></li>
-<li><strong>No sudo, no conda:</strong> prints a clear message — ask your sysadmin or install conda first</li>
+<li><strong>No sudo, no conda:</strong> prints a clear message - ask your sysadmin or install conda first</li>
 </ol>
 <blockquote>
 <p>No sudo and no conda? Install Miniforge (minimal conda) first:</p>
@@ -1252,17 +1252,17 @@
 </blockquote>
 <h3 id="macos">macOS<a class="headerlink" href="#macos" title="Permanent link">&para;</a></h3>
 <ol>
-<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH — if yes, exits immediately</li>
+<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH - if yes, exits immediately</li>
 <li>Installs <strong>Homebrew</strong> if not present (the macOS package manager)</li>
-<li>Installs <strong>Lima</strong> — a lightweight Linux VM manager for macOS</li>
+<li>Installs <strong>Lima</strong> - a lightweight Linux VM manager for macOS</li>
 <li>Creates a Lima VM named <code>apptainer</code> using an Ubuntu template</li>
 <li>Installs Apptainer inside the VM</li>
-<li>Creates a transparent wrapper at <code>~/.local/bin/apptainer</code> that silently proxies all commands into the VM — you never interact with Lima directly</li>
+<li>Creates a transparent wrapper at <code>~/.local/bin/apptainer</code> that silently proxies all commands into the VM - you never interact with Lima directly</li>
 <li>Symlinks <code>~/.local/bin/singularity</code> → <code>apptainer</code></li>
 <li>Adds <code>~/.local/bin</code> to PATH in <code>~/.zshrc</code> / <code>~/.bashrc</code></li>
 </ol>
 <blockquote>
-<p>Your home directory is automatically mounted inside the Lima VM — all your data is accessible with no extra configuration.</p>
+<p>Your home directory is automatically mounted inside the Lima VM - all your data is accessible with no extra configuration.</p>
 </blockquote>
 <h4 id="lima-vm-setup-prompt">Lima VM Setup Prompt<a class="headerlink" href="#lima-vm-setup-prompt" title="Permanent link">&para;</a></h4>
 <p>During setup, you may see a Lima configuration prompt:</p>
@@ -1280,13 +1280,13 @@
 <p>The setup runs once and takes a few minutes. After completion, <code>apptainer</code> commands work transparently on your Mac.</p>
 <h3 id="windows-run-inside-the-ubuntu-wsl2-app">Windows (run inside the Ubuntu WSL2 app)<a class="headerlink" href="#windows-run-inside-the-ubuntu-wsl2-app" title="Permanent link">&para;</a></h3>
 <ol>
-<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH — if yes, exits immediately</li>
+<li>Checks if <code>apptainer</code> or <code>singularity</code> are already in PATH - if yes, exits immediately</li>
 <li>Installs Apptainer inside WSL2 via <code>apt-get</code> (or conda-forge if no sudo)</li>
-<li>Creates <code>%USERPROFILE%\bin\leukoquant.bat</code> — a Windows batch file that routes all <code>leukoquant</code> commands to WSL2, automatically converting Windows paths (<code>C:\data\file.nii.gz</code>) to WSL2 paths (<code>/mnt/c/data/file.nii.gz</code>)</li>
-<li>Writes one line to your <strong>PowerShell profile</strong> (<code>$PROFILE</code>) — the Windows equivalent of <code>.bashrc</code> — so <code>leukoquant</code> is available in every new PowerShell window automatically</li>
+<li>Creates <code>%USERPROFILE%\bin\leukoquant.bat</code> - a Windows batch file that routes all <code>leukoquant</code> commands to WSL2, automatically converting Windows paths (<code>C:\data\file.nii.gz</code>) to WSL2 paths (<code>/mnt/c/data/file.nii.gz</code>)</li>
+<li>Writes one line to your <strong>PowerShell profile</strong> (<code>$PROFILE</code>) - the Windows equivalent of <code>.bashrc</code> - so <code>leukoquant</code> is available in every new PowerShell window automatically</li>
 </ol>
 <hr />
-<h2 id="step-3-install-the-python-package-one-time-per-machine">Step 3 — Install the Python Package (one-time per machine)<a class="headerlink" href="#step-3-install-the-python-package-one-time-per-machine" title="Permanent link">&para;</a></h2>
+<h2 id="step-3-install-the-python-package-one-time-per-machine">Step 3 - Install the Python Package (one-time per machine)<a class="headerlink" href="#step-3-install-the-python-package-one-time-per-machine" title="Permanent link">&para;</a></h2>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>bash<span class="w"> </span>install.sh
 </span></code></pre></div>
 <p><strong>What this installs:</strong></p>
@@ -1294,29 +1294,29 @@
 <li>Creates a Python virtual environment at <code>~/.venvs/leukoquant/</code></li>
 <li>Upgrades pip</li>
 <li>Installs all Python dependencies into the venv:</li>
-<li><code>snakemake 9.20.0</code> — workflow engine</li>
-<li><code>nibabel 5.3.2</code> — NIfTI file I/O</li>
-<li><code>numpy</code>, <code>pandas</code>, <code>scipy</code>, <code>scikit-image</code> — scientific computing</li>
-<li><code>dipy 1.10.0</code> — diffusion MRI</li>
-<li><code>click 8.3.0</code> — CLI framework</li>
-<li><code>PyYAML 6.0.2</code> — config file support</li>
-<li><code>dcm2niix</code> — DICOM conversion</li>
-<li>Adds <code>~/.venvs/leukoquant/bin</code> to PATH permanently in <code>~/.zshrc</code> / <code>~/.bashrc</code> — <strong>no activation needed in any future session</strong></li>
+<li><code>snakemake 9.20.0</code> - workflow engine</li>
+<li><code>nibabel 5.3.2</code> - NIfTI file I/O</li>
+<li><code>numpy</code>, <code>pandas</code>, <code>scipy</code>, <code>scikit-image</code> - scientific computing</li>
+<li><code>dipy 1.10.0</code> - diffusion MRI</li>
+<li><code>click 8.3.0</code> - CLI framework</li>
+<li><code>PyYAML 6.0.2</code> - config file support</li>
+<li><code>dcm2niix</code> - DICOM conversion</li>
+<li>Adds <code>~/.venvs/leukoquant/bin</code> to PATH permanently in <code>~/.zshrc</code> / <code>~/.bashrc</code> - <strong>no activation needed in any future session</strong></li>
 </ol>
 <p><strong>Open a new terminal after this step</strong>, then verify:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>leukoquant<span class="w"> </span>--version
 </span></code></pre></div>
 <hr />
-<h2 id="step-4-freesurfer-licence">Step 4 — FreeSurfer Licence<a class="headerlink" href="#step-4-freesurfer-licence" title="Permanent link">&para;</a></h2>
+<h2 id="step-4-freesurfer-licence">Step 4 - FreeSurfer Licence<a class="headerlink" href="#step-4-freesurfer-licence" title="Permanent link">&para;</a></h2>
 <p>Place your FreeSurfer <code>license.txt</code> inside the repo's <code>leukoquant/licenses/</code> directory (this folder exists in the repo and is never committed to git):</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>leukoquant/
 </span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>└── leukoquant/
 </span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>    └── licenses/
 </span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>        └── license.txt   ← put your FreeSurfer license here
 </span></code></pre></div>
-<p>A FreeSurfer licence is free from <a href="https://surfer.nmr.mgh.harvard.edu/registration.html">surfer.nmr.mgh.harvard.edu</a>. No environment variables need to be set — LeukoQuant picks up the licence automatically.</p>
+<p>A FreeSurfer licence is free from <a href="https://surfer.nmr.mgh.harvard.edu/registration.html">surfer.nmr.mgh.harvard.edu</a>. No environment variables need to be set - LeukoQuant picks up the licence automatically.</p>
 <hr />
-<h2 id="step-5-run">Step 5 — Run<a class="headerlink" href="#step-5-run" title="Permanent link">&para;</a></h2>
+<h2 id="step-5-run">Step 5 - Run<a class="headerlink" href="#step-5-run" title="Permanent link">&para;</a></h2>
 <p>All commands are <strong>identical on macOS, Linux, and Windows</strong> (PowerShell or terminal).</p>
 <h3 id="full-pipeline">Full pipeline<a class="headerlink" href="#full-pipeline" title="Permanent link">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
@@ -1361,7 +1361,7 @@
 </span></code></pre></div>
 <h3 id="using-a-yaml-config-file">Using a YAML config file<a class="headerlink" href="#using-a-yaml-config-file" title="Permanent link">&para;</a></h3>
 <p>Every command accepts <code>--config-yaml &lt;path&gt;</code> instead of (or alongside) its
-CLI flags — useful for long invocations you want to save and re-run.
+CLI flags - useful for long invocations you want to save and re-run.
 <strong>CLI flags always override the equivalent YAML value</strong> when both are given.</p>
 <div class="language-yaml highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># process_all_config.yaml</span>
 </span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/subjects.txt</span>

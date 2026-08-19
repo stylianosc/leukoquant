@@ -1144,21 +1144,21 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td><code>--subject</code></td>
 <td><code>-i</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
 <td><code>--dwi</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>DWI NIfTI (or <code>.zip</code> DICOM archive) file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
 <td><code>--bvecs</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1166,7 +1166,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 <tr>
 <td><code>--bvals</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1174,7 +1174,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 <tr>
 <td><code>--mask</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1182,7 +1182,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 <tr>
 <td><code>--skull-strip</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1192,7 +1192,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <td><code>--output-dir</code></td>
 <td><code>-o</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Root output directory for DTI results</td>
 </tr>
@@ -1214,15 +1214,15 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1238,7 +1238,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 </tr>
 </tbody>
 </table>
-<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1261,7 +1261,7 @@ auto-generates a mask using FreeSurfer <code>mri_synthstrip</code> before fittin
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--dwi</code>, and <code>--output-dir</code>
 may be supplied by a YAML file. <strong>CLI flags always take priority</strong> over the
-equivalent YAML key when both are given — the YAML file only fills in
+equivalent YAML key when both are given - the YAML file only fills in
 whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1310,7 +1310,7 @@ whatever the CLI left unset.</p>
 </tr>
 <tr>
 <td><code>keep_intermediate</code></td>
-<td><em>(no CLI equivalent — YAML-only)</em></td>
+<td><em>(no CLI equivalent - YAML-only)</em></td>
 </tr>
 </tbody>
 </table>
@@ -1392,9 +1392,9 @@ whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_noddi/"><code>process-noddi</code></a> — NODDI fitting on the same DWI data</li>
-<li><a href="../process_metrics/"><code>process-metrics</code></a> — uses DTI maps via <code>--maps</code></li>
-<li><a href="../process_all/"><code>process-all</code></a> — runs DTI fitting as part of the full pipeline</li>
+<li><a href="../process_noddi/"><code>process-noddi</code></a> - NODDI fitting on the same DWI data</li>
+<li><a href="../process_metrics/"><code>process-metrics</code></a> - uses DTI maps via <code>--maps</code></li>
+<li><a href="../process_all/"><code>process-all</code></a> - runs DTI fitting as part of the full pipeline</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/dti_processor.py"><code>leukoquant/core/dti_processor.py</code></a></p>

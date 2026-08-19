@@ -1115,10 +1115,10 @@
 File-based inputs use <code>{subject}</code> as a placeholder in path arguments so each subject's files are resolved automatically.</p>
 <hr />
 <h2 id="subject-input-formats">Subject input formats<a class="headerlink" href="#subject-input-formats" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Single subject — bare ID</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># Single subject - bare ID</span>
 </span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>--subject<span class="w"> </span>sub-001
 </span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>
-</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Multiple subjects — text file (one ID per line)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="c1"># Multiple subjects - text file (one ID per line)</span>
 </span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>--subject<span class="w"> </span>subjects.txt
 </span></code></pre></div>
 <p>When using a subjects file, path arguments support <code>{subject}</code> glob patterns:</p>
@@ -1145,7 +1145,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 </span><span id="__span-3-4"><a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-3-5"><a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Single subject — FLAIR only:</strong></p>
+<p><strong>Single subject - FLAIR only:</strong></p>
 <p>When running GIF on FLAIR-only input, GIF uses a FLAIR-specific database (must contain <code>db.xml</code>). Pass <code>--gif-flair-db</code> to specify its path explicitly. The standard T1 database is used automatically when <code>--t1</code> is present.</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
@@ -1153,14 +1153,14 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_flair_single<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-5"><a id="__codelineno-4-5" name="__codelineno-4-5" href="#__codelineno-4-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div>
-<p><strong>Multiple subjects — FLAIR only:</strong>
+<p><strong>Multiple subjects - FLAIR only:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">"./examples/sample_files/SCANS/{subject}/FLAIR/I*.nii.gz"</span><span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/gif_flair_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Multiple subjects — T1 primary, FLAIR also provided (T1 is used, FLAIR ignored by GIF):</strong>
+<p><strong>Multiple subjects - T1 primary, FLAIR also provided (T1 is used, FLAIR ignored by GIF):</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">"./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz"</span><span class="w"> </span><span class="se">\</span>
@@ -1197,7 +1197,7 @@ File-based inputs use <code>{subject}</code> as a placeholder in path arguments 
 </span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/bamos_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-9-6"><a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Multiple subjects — reusing GIF outputs from a previous <code>process-gif</code> run:</strong>
+<p><strong>Multiple subjects - reusing GIF outputs from a previous <code>process-gif</code> run:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>--flair<span class="w"> </span><span class="s2">"./examples/sample_files/SCANS/{subject}/FLAIR/I*.nii.gz"</span><span class="w"> </span><span class="se">\</span>
@@ -1368,7 +1368,7 @@ recon-all is run automatically before TRACULA. In that case <code>--t1</code> is
 Output is written to <code>{output_dir}/{subject}/outputs/converted_atlas.mgz</code>.</p>
 <p><em>Mandatory:</em> <code>--subject</code>, <code>--input-parcellation</code>, <code>--mapping-file</code>.
 <em>Optional:</em> <code>--output-dir</code> (defaults to the parent directory of <code>--input-parcellation</code>), <code>--no-validate</code>, <code>--scheduler</code>, <code>--cores</code>.</p>
-<p><strong>Single subject — convert GIF parcellation to FreeSurfer format:</strong>
+<p><strong>Single subject - convert GIF parcellation to FreeSurfer format:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-26-1"><a id="__codelineno-26-1" name="__codelineno-26-1" href="#__codelineno-26-1"></a>leukoquant<span class="w"> </span>process-atlas-conversion<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-26-2"><a id="__codelineno-26-2" name="__codelineno-26-2" href="#__codelineno-26-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-001<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-26-3"><a id="__codelineno-26-3" name="__codelineno-26-3" href="#__codelineno-26-3"></a><span class="w">  </span>--input-parcellation<span class="w"> </span>./results/subj-001/gif/outputs/subj-001_NeuroMorph_Parcellation.nii.gz<span class="w"> </span><span class="se">\</span>
@@ -1377,7 +1377,7 @@ Output is written to <code>{output_dir}/{subject}/outputs/converted_atlas.mgz</c
 </span><span id="__span-26-6"><a id="__codelineno-26-6" name="__codelineno-26-6" href="#__codelineno-26-6"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div>
 The converted atlas is written to <code>./results/subj-001/atlas_conversion/outputs/converted_atlas.mgz</code>.</p>
-<p><strong>Single subject — skip validation:</strong>
+<p><strong>Single subject - skip validation:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-27-1"><a id="__codelineno-27-1" name="__codelineno-27-1" href="#__codelineno-27-1"></a>leukoquant<span class="w"> </span>process-atlas-conversion<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-27-2"><a id="__codelineno-27-2" name="__codelineno-27-2" href="#__codelineno-27-2"></a><span class="w">  </span>--subject<span class="w"> </span>subj-001<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-27-3"><a id="__codelineno-27-3" name="__codelineno-27-3" href="#__codelineno-27-3"></a><span class="w">  </span>--input-parcellation<span class="w"> </span>./results/subj-001/gif/outputs/subj-001_NeuroMorph_Parcellation.nii.gz<span class="w"> </span><span class="se">\</span>
@@ -1409,7 +1409,7 @@ Multiple subjects are launched as concurrent Snakemake processes.</p>
 </span><span id="__span-29-6"><a id="__codelineno-29-6" name="__codelineno-29-6" href="#__codelineno-29-6"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/process_all_multi<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-29-7"><a id="__codelineno-29-7" name="__codelineno-29-7" href="#__codelineno-29-7"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Single subject — using GIF parcellation instead of FreeSurfer for TRACULA:</strong>
+<p><strong>Single subject - using GIF parcellation instead of FreeSurfer for TRACULA:</strong>
 GIF runs on the T1 first; its parcellation output is then converted to FreeSurfer label space and used by TRACULA in place of the standard <code>aparc+aseg</code>. Both single- and multi-subject runs are supported.
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-30-1"><a id="__codelineno-30-1" name="__codelineno-30-1" href="#__codelineno-30-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-30-2"><a id="__codelineno-30-2" name="__codelineno-30-2" href="#__codelineno-30-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001/sub-001-ses-01<span class="w"> </span><span class="se">\</span>
@@ -1420,7 +1420,7 @@ GIF runs on the T1 first; its parcellation output is then converted to FreeSurfe
 </span><span id="__span-30-7"><a id="__codelineno-30-7" name="__codelineno-30-7" href="#__codelineno-30-7"></a><span class="w">  </span>--output-dir<span class="w"> </span>./examples/outputs/new/process_all_gif_parcellation<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-30-8"><a id="__codelineno-30-8" name="__codelineno-30-8" href="#__codelineno-30-8"></a><span class="w">  </span>--scheduler<span class="w"> </span>sge
 </span></code></pre></div></p>
-<p><strong>Multiple subjects — using GIF parcellation:</strong>
+<p><strong>Multiple subjects - using GIF parcellation:</strong>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-31-1"><a id="__codelineno-31-1" name="__codelineno-31-1" href="#__codelineno-31-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-31-2"><a id="__codelineno-31-2" name="__codelineno-31-2" href="#__codelineno-31-2"></a><span class="w">  </span>--subject<span class="w"> </span>./examples/sample_files/SCANS/target_subjects.txt<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-31-3"><a id="__codelineno-31-3" name="__codelineno-31-3" href="#__codelineno-31-3"></a><span class="w">  </span>--t1<span class="w">    </span><span class="s2">"./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz"</span><span class="w"> </span><span class="se">\</span>

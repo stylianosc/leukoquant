@@ -1142,7 +1142,7 @@ validation checks that all expected labels are present in the output.</p>
 <td><code>--subject</code></td>
 <td><code>-i</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Subject ID (used as the output subdirectory name)</td>
 </tr>
@@ -1150,7 +1150,7 @@ validation checks that all expected labels are present in the output.</p>
 <td><code>--input-parcellation</code></td>
 <td><code>-p</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Input GIF parcellation NIfTI file (must exist)</td>
 </tr>
@@ -1158,7 +1158,7 @@ validation checks that all expected labels are present in the output.</p>
 <td><code>--mapping-file</code></td>
 <td><code>-m</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>CSV label mapping file (must exist). Columns: source label, target label.</td>
 </tr>
@@ -1172,7 +1172,7 @@ validation checks that all expected labels are present in the output.</p>
 </tr>
 <tr>
 <td><code>--no-validate</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1196,15 +1196,15 @@ validation checks that all expected labels are present in the output.</p>
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1220,7 +1220,7 @@ validation checks that all expected labels are present in the output.</p>
 </tr>
 </tbody>
 </table>
-<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1243,7 +1243,7 @@ validation checks that all expected labels are present in the output.</p>
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--input-parcellation</code>, and
 <code>--mapping-file</code> may be supplied by a YAML file. <strong>CLI flags always take
-priority</strong> over the equivalent YAML key when both are given — the YAML file
+priority</strong> over the equivalent YAML key when both are given - the YAML file
 only fills in whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1351,9 +1351,9 @@ only fills in whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_gif/"><code>process-gif</code></a> — produces the input parcellation NIfTI</li>
-<li><a href="../process_tracula/"><code>process-tracula</code></a> — uses the converted atlas via <code>--brain-parcellation</code></li>
-<li><a href="../process_all/"><code>process-all</code></a> — runs atlas conversion as part of the full pipeline</li>
+<li><a href="../process_gif/"><code>process-gif</code></a> - produces the input parcellation NIfTI</li>
+<li><a href="../process_tracula/"><code>process-tracula</code></a> - uses the converted atlas via <code>--brain-parcellation</code></li>
+<li><a href="../process_all/"><code>process-all</code></a> - runs atlas conversion as part of the full pipeline</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/atlas_converter_processor.py"><code>leukoquant/core/atlas_converter_processor.py</code></a></p>

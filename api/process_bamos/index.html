@@ -1123,18 +1123,18 @@ to guide the segmentation.</p>
 batch:</p>
 <ol>
 <li>
-<p><strong>Standalone</strong> — omit <code>--gif-results-dir</code> (or a given subject's
+<p><strong>Standalone</strong> - omit <code>--gif-results-dir</code> (or a given subject's
    <code>{subject}</code> pattern doesn't match anything). GIF is run internally on
    that subject's <code>--t1</code> / <code>--flair</code> images before BaMoS executes. Requires
-   a local GIF installation (bundled, or via <code>GIF_HOME</code>) — see
+   a local GIF installation (bundled, or via <code>GIF_HOME</code>) - see
    <a href="../process_gif/"><code>process-gif</code></a>.</p>
 </li>
 <li>
-<p><strong>Reuse existing GIF output</strong> — provide <code>--gif-results-dir</code> pointing to a
+<p><strong>Reuse existing GIF output</strong> - provide <code>--gif-results-dir</code> pointing to a
    directory containing four files, matched loosely by substring:
    <code>*_NeuroMorph_Parcellation.nii.gz</code>, <code>*_NeuroMorph_Segmentation.nii.gz</code>,
    <code>*_NeuroMorph_prior.nii.gz</code>, and <code>*TIV*</code>. These don't need to come from
-   this tool's own GIF run — any GIF output with files matching those
+   this tool's own GIF run - any GIF output with files matching those
    patterns works, including one produced independently by someone else.
    GIF is skipped for that subject and only BaMoS runs. If the directory's
    parcellation file doesn't match the expected naming, <code>process-bamos</code>
@@ -1143,7 +1143,7 @@ batch:</p>
 </li>
 </ol>
 <p><strong>Mixed batches</strong>: for a multi-subject run, each subject is resolved
-independently — some may have matching <code>--gif-results-dir</code> results while
+independently - some may have matching <code>--gif-results-dir</code> results while
 others fall back to standalone mode. A subject with no matching directory
 and no available GIF installation is skipped with a warning (not treated as
 a fatal error for the whole batch); the rest of the batch still runs. If
@@ -1167,7 +1167,7 @@ clear error before submitting anything.</p>
 <td><code>--subject</code></td>
 <td><code>-i</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
@@ -1175,7 +1175,7 @@ clear error before submitting anything.</p>
 <td><code>--flair</code></td>
 <td><code>-f</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>FLAIR NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
@@ -1183,7 +1183,7 @@ clear error before submitting anything.</p>
 <td><code>--t1</code></td>
 <td><code>-t</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>T1 NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
@@ -1199,7 +1199,7 @@ clear error before submitting anything.</p>
 <td><code>--output-dir</code></td>
 <td><code>-o</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Root output directory</td>
 </tr>
@@ -1221,15 +1221,15 @@ clear error before submitting anything.</p>
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1245,7 +1245,7 @@ clear error before submitting anything.</p>
 </tr>
 </tbody>
 </table>
-<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="scheduler-options">Scheduler options<a class="headerlink" href="#scheduler-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1268,7 +1268,7 @@ clear error before submitting anything.</p>
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--flair</code>, <code>--t1</code>, and
 <code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
-priority</strong> over the equivalent YAML key when both are given — the YAML file
+priority</strong> over the equivalent YAML key when both are given - the YAML file
 only fills in whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1309,7 +1309,7 @@ only fills in whatever the CLI left unset.</p>
 </tr>
 <tr>
 <td><code>keep_intermediate</code></td>
-<td><em>(no CLI equivalent — YAML-only)</em></td>
+<td><em>(no CLI equivalent - YAML-only)</em></td>
 </tr>
 </tbody>
 </table>
@@ -1354,7 +1354,7 @@ only fills in whatever the CLI left unset.</p>
 <h2 id="notes">Notes<a class="headerlink" href="#notes" title="Permanent link">&para;</a></h2>
 <ul>
 <li><code>--gif-results-dir</code> can be a pattern such as
-  <code>./gif_outputs/{subject}/gif/outputs</code> — the <code>{subject}</code> placeholder is
+  <code>./gif_outputs/{subject}/gif/outputs</code> - the <code>{subject}</code> placeholder is
   substituted per-subject.</li>
 <li>A GIF installation (bundled, or <code>GIF_HOME</code>) is only required if at least
   one subject in the batch actually needs GIF run internally. A batch
@@ -1373,7 +1373,7 @@ only fills in whatever the CLI left unset.</p>
 </span><span id="__span-3-7"><a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a>            └── ...
 </span></code></pre></div>
 <h2 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">&para;</a></h2>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Standalone — GIF runs internally</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="c1"># Standalone - GIF runs internally</span>
 </span><span id="__span-4-2"><a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-3"><a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>--subject<span class="w"> </span>sub-001<span class="w"> </span><span class="se">\</span>
 </span><span id="__span-4-4"><a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--flair<span class="w"> </span>./data/sub-001/FLAIR/scan.nii.gz<span class="w"> </span><span class="se">\</span>
@@ -1391,9 +1391,9 @@ only fills in whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_gif/"><code>process-gif</code></a> — produces the GIF parcellation consumed here</li>
-<li><a href="../process_metrics/"><code>process-metrics</code></a> — uses the BaMoS lesion mask via <code>--lesion-path</code></li>
-<li><a href="../process_all/"><code>process-all</code></a> — runs BaMoS as part of the full pipeline</li>
+<li><a href="../process_gif/"><code>process-gif</code></a> - produces the GIF parcellation consumed here</li>
+<li><a href="../process_metrics/"><code>process-metrics</code></a> - uses the BaMoS lesion mask via <code>--lesion-path</code></li>
+<li><a href="../process_all/"><code>process-all</code></a> - runs BaMoS as part of the full pipeline</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/bamos_processor.py"><code>leukoquant/core/bamos_processor.py</code></a></p>

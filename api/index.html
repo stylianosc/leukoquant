@@ -1147,11 +1147,11 @@ standalone tools independent of the rest of the pipeline.</p>
 </tr>
 <tr>
 <td><a href="process_dti/"><code>process-dti</code></a></td>
-<td>DTI model fitting — FA, MD, RD, AD maps</td>
+<td>DTI model fitting - FA, MD, RD, AD maps</td>
 </tr>
 <tr>
 <td><a href="process_noddi/"><code>process-noddi</code></a></td>
-<td>NODDI model fitting — ODI, ICVF, ISOVF maps</td>
+<td>NODDI model fitting - ODI, ICVF, ISOVF maps</td>
 </tr>
 <tr>
 <td><a href="process_atlas_conversion/"><code>process-atlas-conversion</code></a></td>
@@ -1263,7 +1263,7 @@ file that supplies default values for its arguments. This is convenient for
 complex, multi-flag invocations you want to save and re-run, or for
 CI/scripted usage where writing a file is cleaner than a long command line.</p>
 <p><strong>Precedence: CLI flags always win.</strong> A <code>--config-yaml</code> value is only used
-for an argument that was <em>not</em> also given on the command line — it never
+for an argument that was <em>not</em> also given on the command line - it never
 overrides an explicit CLI flag. This lets you keep a shared config file for a
 dataset and override just one or two values per invocation:</p>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span>--config-yaml<span class="w"> </span>my_config.yaml<span class="w"> </span>--output-dir<span class="w"> </span>./run2
@@ -1271,7 +1271,7 @@ dataset and override just one or two values per invocation:</p>
 <p>YAML keys generally match the long-form flag name with dashes replaced by
 underscores (e.g. <code>--tractography-path</code> → <code>tractography_path</code>). Most
 commands also accept a shorter alias matching the flag itself (e.g. <code>t1</code> as
-well as <code>t1_pattern</code>) — each command's page lists its exact recognized keys
+well as <code>t1_pattern</code>) - each command's page lists its exact recognized keys
 under its own "Config file" section.</p>
 <p>A <code>--config-yaml</code> path that doesn't exist raises an error immediately; a
 command is never silently run with an unintended file.</p>

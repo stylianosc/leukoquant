@@ -1226,23 +1226,23 @@ one row per subject with columns for each tract × metric combination.</p>
 <tbody>
 <tr>
 <td><code>--subject</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
 <tr>
 <td><code>--tractography-path</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Tractography pattern: <code>base:glob:space</code>. Example: <code>./tracula/{subject}/tracula-freesurfer/outputs:dpath/*/path.pd.nii.gz:dwi</code></td>
 </tr>
 <tr>
 <td><code>--t1-path</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1250,7 +1250,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 <tr>
 <td><code>--dwi-path</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1258,7 +1258,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 <tr>
 <td><code>--lesion-path</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1274,7 +1274,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 <tr>
 <td><code>--tract-mode</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>choice</code></td>
 <td><code>tractography-atlas</code></td>
 <td>No</td>
@@ -1282,7 +1282,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 <tr>
 <td><code>--parcellation</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>freesurfer</code></td>
 <td>No</td>
@@ -1292,13 +1292,13 @@ one row per subject with columns for each tract × metric combination.</p>
 <td><code>--output-dir</code></td>
 <td><code>-o</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Root output directory for metrics CSV files</td>
 </tr>
 <tr>
 <td><code>--scheduler</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>choice</code></td>
 <td><code>local</code></td>
 <td>No</td>
@@ -1314,15 +1314,15 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1338,7 +1338,7 @@ one row per subject with columns for each tract × metric combination.</p>
 </tr>
 </tbody>
 </table>
-<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="tract-mode-options">Tract mode options<a class="headerlink" href="#tract-mode-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1422,7 +1422,7 @@ one row per subject with columns for each tract × metric combination.</p>
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--tractography-path</code>, and
 <code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
-priority</strong> over the equivalent YAML key when both are given — the YAML file
+priority</strong> over the equivalent YAML key when both are given - the YAML file
 only fills in whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1479,7 +1479,7 @@ only fills in whatever the CLI left unset.</p>
 </tr>
 <tr>
 <td><code>keep_intermediate</code></td>
-<td><em>(no CLI equivalent — YAML-only)</em></td>
+<td><em>(no CLI equivalent - YAML-only)</em></td>
 </tr>
 </tbody>
 </table>
@@ -1571,12 +1571,12 @@ only fills in whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_tracula/"><code>process-tracula</code></a> — produces the tractography input</li>
-<li><a href="../process_bamos/"><code>process-bamos</code></a> — produces the lesion mask for <code>--lesion-path</code></li>
-<li><a href="../process_dti/"><code>process-dti</code></a> — produces FA/MD maps for <code>--maps</code></li>
-<li><a href="../process_noddi/"><code>process-noddi</code></a> — produces ODI/ICVF maps for <code>--maps</code></li>
-<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> — quality-control companion for tractography</li>
-<li><a href="../process_all/"><code>process-all</code></a> — runs metrics extraction as part of the full pipeline</li>
+<li><a href="../process_tracula/"><code>process-tracula</code></a> - produces the tractography input</li>
+<li><a href="../process_bamos/"><code>process-bamos</code></a> - produces the lesion mask for <code>--lesion-path</code></li>
+<li><a href="../process_dti/"><code>process-dti</code></a> - produces FA/MD maps for <code>--maps</code></li>
+<li><a href="../process_noddi/"><code>process-noddi</code></a> - produces ODI/ICVF maps for <code>--maps</code></li>
+<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> - quality-control companion for tractography</li>
+<li><a href="../process_all/"><code>process-all</code></a> - runs metrics extraction as part of the full pipeline</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/metrics_processor.py"><code>leukoquant/core/metrics_processor.py</code></a></p>

@@ -1161,17 +1161,17 @@ dependencies automatically:</p>
 <div class="language-text highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>T1 + FLAIR + DWI
 </span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>    │
 </span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    ├─ process-gif         (from T1 / FLAIR)
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    ├─ process-recon       (from T1)          — freesurfer parcellation only
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    ├─ process-recon       (from T1)          - freesurfer parcellation only
 </span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    ├─ process-bamos       (from T1 + FLAIR + GIF)
 </span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    ├─ process-dti         (from DWI)
 </span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>    ├─ process-noddi       (from DWI)
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    ├─ process-atlas-conversion  (from GIF)   — gif parcellation only
+</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    ├─ process-atlas-conversion  (from GIF)   - gif parcellation only
 </span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    │
 </span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>    ├─ process-tracula     (from DWI + recon/gif)
 </span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    │
 </span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    ├─ process-metrics     (from tracula + bamos + dti/noddi)
 </span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    ├─ process-tract-qc    (from tracula)
-</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    └─ process-zscore      (from dti/noddi + healthy cohort)   — optional
+</span><span id="__span-1-14"><a id="__codelineno-1-14" name="__codelineno-1-14" href="#__codelineno-1-14"></a>    └─ process-zscore      (from dti/noddi + healthy cohort)   - optional
 </span></code></pre></div>
 <h3 id="parcellation-support">Parcellation support<a class="headerlink" href="#parcellation-support" title="Permanent link">&para;</a></h3>
 <p><code>--parcellation</code> controls which atlas is used for TRACULA.  Multiple
@@ -1222,7 +1222,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>--subject</code></td>
 <td><code>-i</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Subject ID, or path to a <code>.txt</code> file listing one subject ID per line</td>
 </tr>
@@ -1230,7 +1230,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>--t1</code></td>
 <td><code>-t</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>T1 NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
@@ -1238,7 +1238,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>--flair</code></td>
 <td><code>-f</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>FLAIR NIfTI file or <code>{subject}</code> glob pattern</td>
 </tr>
@@ -1246,13 +1246,13 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>--dwi</code></td>
 <td><code>-d</code></td>
 <td><code>str</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>DWI NIfTI (or <code>.zip</code> DICOM archive) file or <code>{subject}</code> glob pattern</td>
 </tr>
 <tr>
 <td><code>--bvecs</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>""</code></td>
 <td>No</td>
@@ -1260,7 +1260,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--bvals</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>""</code></td>
 <td>No</td>
@@ -1268,7 +1268,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--mask</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1276,7 +1276,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--parcellation</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>freesurfer</code></td>
 <td>No</td>
@@ -1284,7 +1284,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--healthy-subjects</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1292,7 +1292,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--demographics-csv</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1300,7 +1300,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--covariates</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1308,7 +1308,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--poly-terms</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>str</code></td>
 <td><code>None</code></td>
 <td>No</td>
@@ -1316,7 +1316,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--skip-zscore</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1326,7 +1326,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <td><code>--output-dir</code></td>
 <td><code>-o</code></td>
 <td><code>path</code></td>
-<td>—</td>
+<td>-</td>
 <td><strong>Yes</strong>*</td>
 <td>Root output directory</td>
 </tr>
@@ -1348,15 +1348,15 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 <tr>
 <td><code>--config-yaml</code></td>
-<td>—</td>
+<td>-</td>
 <td><code>path</code></td>
 <td><code>None</code></td>
 <td>No</td>
-<td>YAML file supplying defaults for any of the above — see <a href="#config-file-config-yaml">Config file</a> below</td>
+<td>YAML file supplying defaults for any of the above - see <a href="#config-file-config-yaml">Config file</a> below</td>
 </tr>
 <tr>
 <td><code>--force</code></td>
-<td>—</td>
+<td>-</td>
 <td>flag</td>
 <td><code>False</code></td>
 <td>No</td>
@@ -1372,7 +1372,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 </tr>
 </tbody>
 </table>
-<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag — see below.</p>
+<p>* Required overall, but may be supplied via <code>--config-yaml</code> instead of the CLI flag - see below.</p>
 <h3 id="parcellation-options">Parcellation options<a class="headerlink" href="#parcellation-options" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -1418,7 +1418,7 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <h2 id="config-file-config-yaml">Config file (<code>--config-yaml</code>)<a class="headerlink" href="#config-file-config-yaml" title="Permanent link">&para;</a></h2>
 <p>Instead of (or alongside) CLI flags, <code>--subject</code>, <code>--t1</code>, <code>--flair</code>, <code>--dwi</code>,
 and <code>--output-dir</code> may be supplied by a YAML file. <strong>CLI flags always take
-priority</strong> over the equivalent YAML key when both are given — the YAML file
+priority</strong> over the equivalent YAML key when both are given - the YAML file
 only fills in whatever the CLI left unset.</p>
 <p>Recognized keys:</p>
 <table>
@@ -1621,13 +1621,13 @@ only fills in whatever the CLI left unset.</p>
 </span></code></pre></div>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
-<li><a href="../process_gif/"><code>process-gif</code></a> — GIF segmentation (run independently or via process-all)</li>
-<li><a href="../process_recon/"><code>process-recon</code></a> — FreeSurfer recon-all</li>
-<li><a href="../process_bamos/"><code>process-bamos</code></a> — WMH segmentation</li>
-<li><a href="../process_tracula/"><code>process-tracula</code></a> — TRACULA tractography</li>
-<li><a href="../process_metrics/"><code>process-metrics</code></a> — standalone metrics extraction</li>
-<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> — standalone tract QC</li>
-<li><a href="../process_zscore/"><code>process-zscore</code></a> — standalone Z-score computation</li>
+<li><a href="../process_gif/"><code>process-gif</code></a> - GIF segmentation (run independently or via process-all)</li>
+<li><a href="../process_recon/"><code>process-recon</code></a> - FreeSurfer recon-all</li>
+<li><a href="../process_bamos/"><code>process-bamos</code></a> - WMH segmentation</li>
+<li><a href="../process_tracula/"><code>process-tracula</code></a> - TRACULA tractography</li>
+<li><a href="../process_metrics/"><code>process-metrics</code></a> - standalone metrics extraction</li>
+<li><a href="../process_tract_qc/"><code>process-tract-qc</code></a> - standalone tract QC</li>
+<li><a href="../process_zscore/"><code>process-zscore</code></a> - standalone Z-score computation</li>
 </ul>
 <h2 id="source">Source<a class="headerlink" href="#source" title="Permanent link">&para;</a></h2>
 <p><a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/cli/main.py"><code>leukoquant/cli/main.py</code></a> · <a href="https://github.com/stylianosc/leukoquant/blob/main/leukoquant/core/process_all_processor.py"><code>leukoquant/core/process_all_processor.py</code></a></p>
