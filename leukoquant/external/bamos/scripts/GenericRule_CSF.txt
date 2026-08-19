@@ -1,0 +1,31 @@
+LesionRule 2
+LesionRuleUniform 2
+Acceptance 0 1 2
+AcceptanceUniform 0 1 2
+Questionable 1 -1 0
+RefinedCheck 2 1 1 3 1 1 4 1 1
+RefinedCheck2 2 1 2 4 1 2
+QuestionableUniform 1 -1 0
+RefinedCheckUniform 2 2 1 3 2 1 4 2 1
+RefinedCheckUniform2 2 1 2 4 1 2
+CheckSuspicious 0 2 0 3 1 2 1 3 2 1
+Modality 1
+0 0 0 0
+1 1 1 1
+0 0 0 0
+1 1 1 1
+Modality 2
+1 1 1 1
+0 1 0 0
+1 1 1 1
+0 1 0 0
+Modality 3
+1 1 1 1
+0 1 0 0
+1 1 1 1
+0 1 0 0
+Modality 4
+1 1 1 1
+0 1 0 0
+1 1 1 1
+0 1 0 0

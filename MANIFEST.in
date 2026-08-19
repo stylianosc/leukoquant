@@ -1,0 +1,11 @@
+include README.md
+include requirements.txt
+include setup.py
+recursive-include examples *
+recursive-include mappings *
+recursive-include docs *
+recursive-include tests *
+recursive-include neuro_analyser/external *
+graft neuro_analyser
+global-exclude *.pyc
+global-exclude __pycache__

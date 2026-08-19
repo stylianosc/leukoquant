@@ -1,0 +1,9 @@
+# Minimal version constraints for downstream package integration
+# Use this file if you're packaging leukoquant as a dependency
+# Install with: pip install -r requirements-min.txt
+
+
+click>=8.0
+PyYAML>=6.0
+snakemake>=7.0
+snakemake_interface_executor_plugins>=9.0

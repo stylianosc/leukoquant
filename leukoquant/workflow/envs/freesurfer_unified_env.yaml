@@ -1,0 +1,16 @@
+name: freesurfer_unified_env
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - numpy=1.26.4
+  - scipy=1.13.1
+  - pandas=2.2.2
+  - nibabel=5.0.1
+  - nilearn=0.10.4
+  - scikit-image=0.24.0
+  - scikit-learn=1.5.2
+  - pip:
+    - dipy==1.10.0

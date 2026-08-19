@@ -1,0 +1,23 @@
+# Core dependencies for leukoquant atlas converter
+# Install with: pip install -r requirements.txt
+
+# Command line interface
+click==8.3.0
+
+# YAML config support
+PyYAML==6.0.2
+
+# Snakemake
+snakemake==9.20.0
+snakemake_interface_executor_plugins==9.4.0
+
+# SGE executor plugin
+snakemake-executor-plugin-sge==0.6.24
+
+# Container download from Hugging Face
+huggingface_hub==1.14.0
+
+# Data processing
+numpy==1.26.4
+pandas==2.2.3
+
