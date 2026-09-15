@@ -644,6 +644,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#gpu-acceleration" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GPU Acceleration
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#using-a-yaml-config-file" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1349,33 +1360,56 @@
 </span><span id="__span-9-7"><a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span>--cores<span class="w">      </span><span class="m">8</span>
 </span></code></pre></div>
 <h3 id="individual-steps">Individual steps<a class="headerlink" href="#individual-steps" title="Permanent link">&para;</a></h3>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w">   </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--t1<span class="w"> </span>/data/sub-01_T1.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
-</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--flair<span class="w"> </span>/data/FLAIR.nii.gz<span class="w"> </span>--t1<span class="w"> </span>/data/T1.nii.gz<span class="w"> </span>--gif-results-dir<span class="w"> </span>/data/gif<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
-</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>leukoquant<span class="w"> </span>process-dti<span class="w">   </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--dwi<span class="w"> </span>/data/DWI.nii.gz<span class="w"> </span>--bvecs<span class="w"> </span>/data/sub.bvec<span class="w"> </span>--bvals<span class="w"> </span>/data/sub.bval<span class="w"> </span>--mask<span class="w"> </span>/data/mask.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
-</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>leukoquant<span class="w"> </span>process-noddi<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--dwi<span class="w"> </span>/data/DWI.nii.gz<span class="w"> </span>--bvecs<span class="w"> </span>/data/sub.bvec<span class="w"> </span>--bvals<span class="w"> </span>/data/sub.bval<span class="w"> </span>--mask<span class="w"> </span>/data/mask.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
-</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--tractography-path<span class="w"> </span><span class="s2">"/data/tracula:/dpath/*/path.pd.nii.gz:dwi"</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/metrics
-</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>leukoquant<span class="w"> </span>process-zscore<span class="w">  </span>--healthy-list<span class="w"> </span>/data/healthy.txt<span class="w"> </span>--target-list<span class="w"> </span>/data/patients.txt<span class="w"> </span>--output-dir<span class="w"> </span>/data/zscores
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="c1"># GIF brain parcellation (CPU default)</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>leukoquant<span class="w"> </span>process-gif<span class="w">   </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--t1<span class="w"> </span>/data/sub-01_T1.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="c1"># GIF brain parcellation with GPU acceleration (CUDA libraries download automatically on first run — no setup needed)</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>leukoquant<span class="w"> </span>process-gif<span class="w">   </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--t1<span class="w"> </span>/data/sub-01_T1.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output<span class="w"> </span>--gpu
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>leukoquant<span class="w"> </span>process-bamos<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--flair<span class="w"> </span>/data/FLAIR.nii.gz<span class="w"> </span>--t1<span class="w"> </span>/data/T1.nii.gz<span class="w"> </span>--gif-results-dir<span class="w"> </span>/data/gif<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>leukoquant<span class="w"> </span>process-dti<span class="w">   </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--dwi<span class="w"> </span>/data/DWI.nii.gz<span class="w"> </span>--bvecs<span class="w"> </span>/data/sub.bvec<span class="w"> </span>--bvals<span class="w"> </span>/data/sub.bval<span class="w"> </span>--mask<span class="w"> </span>/data/mask.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>leukoquant<span class="w"> </span>process-noddi<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--dwi<span class="w"> </span>/data/DWI.nii.gz<span class="w"> </span>--bvecs<span class="w"> </span>/data/sub.bvec<span class="w"> </span>--bvals<span class="w"> </span>/data/sub.bval<span class="w"> </span>--mask<span class="w"> </span>/data/mask.nii.gz<span class="w"> </span>--output-dir<span class="w"> </span>/data/output
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>leukoquant<span class="w"> </span>process-metrics<span class="w"> </span>--subject<span class="w"> </span>sub-01<span class="w"> </span>--tractography-path<span class="w"> </span><span class="s2">"/data/tracula:/dpath/*/path.pd.nii.gz:dwi"</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/metrics
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>leukoquant<span class="w"> </span>process-zscore<span class="w">  </span>--healthy-list<span class="w"> </span>/data/healthy.txt<span class="w"> </span>--target-list<span class="w"> </span>/data/patients.txt<span class="w"> </span>--output-dir<span class="w"> </span>/data/zscores
 </span></code></pre></div>
 <h3 id="hpc-sge">HPC (SGE)<a class="headerlink" href="#hpc-sge" title="Permanent link">&para;</a></h3>
 <div class="language-bash highlight"><pre><span></span><code><span id="__span-11-1"><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>...<span class="w"> </span>--scheduler<span class="w"> </span>sge<span class="w"> </span>--cores<span class="w"> </span><span class="m">16</span>
 </span></code></pre></div>
+<h3 id="gpu-acceleration">GPU Acceleration<a class="headerlink" href="#gpu-acceleration" title="Permanent link">&para;</a></h3>
+<p>GIF brain parcellation supports CUDA GPU acceleration for its NiftyReg registration steps (<code>reg_aladin</code> and <code>reg_f3d</code>), which significantly speeds up multi-atlas propagation and segmentation.</p>
+<p>To enable GPU acceleration, simply pass the <code>--gpu</code> flag:</p>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>leukoquant<span class="w"> </span>process-gif<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>--subject<span class="w"> </span>sub-01<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>--t1<span class="w"> </span>/data/sub-01_T1.nii.gz<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span>--output-dir<span class="w"> </span>/data/output<span class="w"> </span><span class="se">\</span>
+</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span>--gpu
+</span></code></pre></div>
+<div class="admonition tip">
+<p class="admonition-title">Automatic CUDA Library Setup — No Action Required</p>
+<p>You <strong>do not need to manually download anything</strong>, install a CUDA development toolkit, or set up a Hugging Face account.</p>
+<p>When <code>--gpu</code> is run for the first time, LeukoQuant <strong>automatically downloads</strong> the required CUDA runtime libraries (<code>cuSOLVER</code>, <code>cuBLAS</code>, <code>cuBLASLt</code>, <code>cuSPARSE</code>, ~1.25 GB total) from Hugging Face into <code>leukoquant/external/niftyreg/gpu/lib/</code> and caches them locally for all subsequent runs. </p>
+<p>The only requirement on your machine is a standard NVIDIA GPU with compatible NVIDIA drivers.</p>
+</div>
+<ul>
+<li><strong>BaMoS integration:</strong> If running end-to-end BaMoS (<code>leukoquant process-bamos --gpu</code>) without precomputed GIF results, the <code>--gpu</code> flag is automatically forwarded to accelerate the internal GIF prerequisite run.</li>
+</ul>
 <h3 id="using-a-yaml-config-file">Using a YAML config file<a class="headerlink" href="#using-a-yaml-config-file" title="Permanent link">&para;</a></h3>
 <p>Every command accepts <code>--config-yaml &lt;path&gt;</code> instead of (or alongside) its
 CLI flags - useful for long invocations you want to save and re-run.
 <strong>CLI flags always override the equivalent YAML value</strong> when both are given.</p>
-<div class="language-yaml highlight"><pre><span></span><code><span id="__span-12-1"><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="c1"># process_all_config.yaml</span>
-</span><span id="__span-12-2"><a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/subjects.txt</span>
-</span><span id="__span-12-3"><a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="nt">t1</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_T1.nii.gz"</span>
-</span><span id="__span-12-4"><a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="nt">flair</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_FLAIR.nii.gz"</span>
-</span><span id="__span-12-5"><a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="nt">dwi</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_DWI.nii.gz"</span>
-</span><span id="__span-12-6"><a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/output</span>
-</span><span id="__span-12-7"><a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
-</span><span id="__span-12-8"><a id="__codelineno-12-8" name="__codelineno-12-8" href="#__codelineno-12-8"></a><span class="nt">cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
+<div class="language-yaml highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="c1"># process_all_config.yaml</span>
+</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="nt">subject</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/subjects.txt</span>
+</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="nt">t1</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_T1.nii.gz"</span>
+</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a><span class="nt">flair</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_FLAIR.nii.gz"</span>
+</span><span id="__span-13-5"><a id="__codelineno-13-5" name="__codelineno-13-5" href="#__codelineno-13-5"></a><span class="nt">dwi</span><span class="p">:</span><span class="w"> </span><span class="s">"/data/{subject}_DWI.nii.gz"</span>
+</span><span id="__span-13-6"><a id="__codelineno-13-6" name="__codelineno-13-6" href="#__codelineno-13-6"></a><span class="nt">output_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/output</span>
+</span><span id="__span-13-7"><a id="__codelineno-13-7" name="__codelineno-13-7" href="#__codelineno-13-7"></a><span class="nt">scheduler</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sge</span>
+</span><span id="__span-13-8"><a id="__codelineno-13-8" name="__codelineno-13-8" href="#__codelineno-13-8"></a><span class="nt">cores</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">8</span>
 </span></code></pre></div>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-13-1"><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml
-</span><span id="__span-13-2"><a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a>
-</span><span id="__span-13-3"><a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="c1"># override just one value for this run; everything else still comes from the YAML</span>
-</span><span id="__span-13-4"><a id="__codelineno-13-4" name="__codelineno-13-4" href="#__codelineno-13-4"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml<span class="w"> </span>--cores<span class="w"> </span><span class="m">16</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml
+</span><span id="__span-14-2"><a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a>
+</span><span id="__span-14-3"><a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="c1"># override just one value for this run; everything else still comes from the YAML</span>
+</span><span id="__span-14-4"><a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a>leukoquant<span class="w"> </span>process-all<span class="w"> </span>--config-yaml<span class="w"> </span>process_all_config.yaml<span class="w"> </span>--cores<span class="w"> </span><span class="m">16</span>
 </span></code></pre></div>
 <p>See each command's page in the <a href="../api/">API Reference</a> for its exact
 recognized YAML keys.</p>
@@ -1441,23 +1475,23 @@ recognized YAML keys.</p>
 <p><strong><code>leukoquant: command not found</code></strong>
 Open a new terminal, or run: <code>export PATH="$HOME/.venvs/leukoquant/bin:$PATH"</code></p>
 <p><strong><code>No container runtime found in PATH</code></strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-14-1"><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a>bash<span class="w"> </span>setup_platform.sh<span class="w">  </span><span class="c1"># then open a new terminal</span>
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>bash<span class="w"> </span>setup_platform.sh<span class="w">  </span><span class="c1"># then open a new terminal</span>
 </span></code></pre></div>
 <p><strong><code>FreeSurfer licence not found</code></strong></p>
 <p>Place <code>license.txt</code> in <code>leukoquant/licenses/</code> (the directory exists in the repo):</p>
-<div class="language-text highlight"><pre><span></span><code><span id="__span-15-1"><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a>leukoquant/licenses/license.txt
+<div class="language-text highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>leukoquant/licenses/license.txt
 </span></code></pre></div>
 <p><strong>macOS: <code>limactl: command not found</code></strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-16-1"><a id="__codelineno-16-1" name="__codelineno-16-1" href="#__codelineno-16-1"></a>brew<span class="w"> </span>install<span class="w"> </span>lima<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>bash<span class="w"> </span>setup_platform.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a>brew<span class="w"> </span>install<span class="w"> </span>lima<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>bash<span class="w"> </span>setup_platform.sh
 </span></code></pre></div>
 <p><strong>Windows: <code>leukoquant is not recognised</code> in PowerShell</strong>
 Open a new PowerShell window. If still failing:</p>
-<div class="language-powershell highlight"><pre><span></span><code><span id="__span-17-1"><a id="__codelineno-17-1" name="__codelineno-17-1" href="#__codelineno-17-1"></a><span class="nb">cat </span><span class="nv">$PROFILE</span>  <span class="c"># should contain a leukoquant line</span>
+<div class="language-powershell highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a><span class="nb">cat </span><span class="nv">$PROFILE</span>  <span class="c"># should contain a leukoquant line</span>
 </span></code></pre></div>
 <p><strong>Linux: no sudo, no conda</strong></p>
-<div class="language-bash highlight"><pre><span></span><code><span id="__span-18-1"><a id="__codelineno-18-1" name="__codelineno-18-1" href="#__codelineno-18-1"></a>curl<span class="w"> </span>-L<span class="w"> </span>https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
-</span><span id="__span-18-2"><a id="__codelineno-18-2" name="__codelineno-18-2" href="#__codelineno-18-2"></a><span class="c1"># open new terminal, then:</span>
-</span><span id="__span-18-3"><a id="__codelineno-18-3" name="__codelineno-18-3" href="#__codelineno-18-3"></a>bash<span class="w"> </span>setup_platform.sh
+<div class="language-bash highlight"><pre><span></span><code><span id="__span-19-1"><a id="__codelineno-19-1" name="__codelineno-19-1" href="#__codelineno-19-1"></a>curl<span class="w"> </span>-L<span class="w"> </span>https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-x86_64.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>bash
+</span><span id="__span-19-2"><a id="__codelineno-19-2" name="__codelineno-19-2" href="#__codelineno-19-2"></a><span class="c1"># open new terminal, then:</span>
+</span><span id="__span-19-3"><a id="__codelineno-19-3" name="__codelineno-19-3" href="#__codelineno-19-3"></a>bash<span class="w"> </span>setup_platform.sh
 </span></code></pre></div>
 
 
