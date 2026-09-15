@@ -113,7 +113,7 @@ JUMP_START = int(config.get("jump_start", 0))
 OPT        = config.get("opt", "TA")
 
 SCRIPTS_DIR              = "/leukoquant/leukoquant/external/bamos/scripts"
-BAMOS_SCRIPT             = f"{SCRIPTS_DIR}/BaMoS_WMH_080526_local.sh"
+BAMOS_SCRIPT             = f"{SCRIPTS_DIR}/BaMoS_WMH_200826_local.sh"
 BAMOS_CORRECTIONS_SCRIPT = f"{SCRIPTS_DIR}/correction_lesions_111125.py"
 
 LEUKOQUANT_PARENT_DIR = config.get("leukoquant_parent_dir")
@@ -139,6 +139,14 @@ config_gif = {
     "leukoquant_parent_dir": LEUKOQUANT_PARENT_DIR,
     "keep_intermediate": KEEP_INTERMEDIATE,
     "gif_home_host": config.get("gif_home_host", ""),
+    # Added 2026-08-28: this dict previously never forwarded use_gpu at all,
+    # so process-bamos's --gpu flag silently had no effect on the internal
+    # GIF prerequisite run it triggers when --gif-results-dir isn't given
+    # (gif_workflow.smk's own USE_GPU always defaulted to False here,
+    # regardless of what the user passed). BaMoS's own registration stays
+    # CPU-only unconditionally (see USE_GPU further below, hardcoded False)
+    # -- this only affects the GIF submodule's own USE_GPU line.
+    "use_gpu": config.get("use_gpu", False),
 }
 module gif:
     snakefile: "gif_workflow.smk"
@@ -148,13 +156,39 @@ use rule * from gif as gif_*
 
 
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
-from leukoquant.utils.container_utils import ensure_container
+from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_gpu, ensure_niftyreg_cuda_libs
 
 CONTAINER_SIF = os.path.join(
     LEUKOQUANT_PARENT_DIR,
     "leukoquant/workflow/containers/miniconda_unified_container.sif",
 )
 ensure_container(CONTAINER_SIF)
+
+# GPU disabled for BaMoS's OWN registration as of 2026-08-28 -- hardcoded
+# False unconditionally, ignoring config["use_gpu"] entirely (including
+# process-bamos's own --gpu flag and process-all --gpu's fan-out). BaMoS's
+# own EM/segmentation binaries (Seg_BiASM, Seg_Analysis) never had GPU
+# support; this only ever CUDA-accelerated the internal NiftyReg
+# registration substeps BaMoS shells out to, and in practice that wasn't
+# worth occupying a GPU node for.
+#
+# NOTE: config["use_gpu"] is still very much read elsewhere -- see
+# config_gif's own "use_gpu" key above, which DOES forward it into the
+# internal GIF prerequisite module, so `process-bamos --gpu` still
+# GPU-accelerates that GIF run even though it's a no-op for BaMoS's own
+# steps below. To re-enable GPU for BaMoS's own registration too, restore
+# the line below -- nothing else in this file, the wrapper script, or the
+# binaries needs to change.
+#   USE_GPU = config.get("use_gpu", False)
+USE_GPU = False
+PLATF = 1 if USE_GPU else 0
+# NiftyReg's build is a single unified binary supporting both -platf 0 (CPU)
+# and -platf 1 (CUDA), so both ensure calls run unconditionally, not gated
+# behind USE_GPU -- there's no separate CPU-only NiftyReg build to fall back
+# to (confirmed 2026-08-25: NIFTYREG_GPU_BIN is the only binary path
+# BaMoS's own script ever references, regardless of --platf).
+ensure_niftyreg_gpu(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
+ensure_niftyreg_cuda_libs(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
 
 container:
     CONTAINER_SIF
@@ -209,8 +243,11 @@ rule run_bamos:
         time="168:00:00" if JUMP_START == 0 else "2:00:00",
         name="BaMoS" if JUMP_START == 0 else f"BaMoSLes_{wildcards.subject}",
         workdir=lambda wildcards: f"{OUTPUT_DIR}/{wildcards.subject}/{TOOL_NAME}",
+        sge_resources=("gpu=true" if USE_GPU else ""),
+        sge_pe=("gpu" if USE_GPU else None),
     params:
         bamos_script=BAMOS_SCRIPT,
+        platf=PLATF,
         flair_sing=lambda wildcards: flair_sing_map[wildcards.subject],
         t1_sing=lambda wildcards: t1_sing_map[wildcards.subject],
         gif_path_sing=lambda wildcards: gif_sing_map[wildcards.subject] if gif_map.get(wildcards.subject) else f"{OUTPUT_DIR_SING}/{wildcards.subject}/gif/outputs",
@@ -240,6 +277,7 @@ rule run_bamos:
         fi
         exec > "{params.log_file}"
         exec 2> "{params.error_file}"
+        require_gpu_if_platf1 "{params.platf}"
 
         echo "Date: $(date)"
         echo "Date: $(date)" >&2
@@ -282,7 +320,7 @@ rule run_bamos:
             --verbose
 
         # Reorient T1 and FLAIR to RAS+ before passing to BaMoS.
-        # BaMoS assumes RAS orientation (see BaMoS_WMH_080526_local.sh line 5).
+        # BaMoS assumes RAS orientation (see BaMoS_WMH_200826_local.sh line 5).
         t1_ras="$scratch_path/t1_ras.nii.gz"
         flair_ras="$scratch_path/flair_ras.nii.gz"
         echo "Reorienting T1 to RAS+: $t1_singleframe -> $t1_ras"
@@ -309,7 +347,8 @@ rule run_bamos:
             {params.jump_start} \
             {params.opt} \
             {params.space} \
-            $scratch_path"
+            $scratch_path \
+            {params.platf}"
 
         echo "Running $bamos_cmd"
         $bamos_cmd
@@ -350,8 +389,19 @@ rule run_bamos:
                     "LesionMahal_T1FLAIR_BiASM*"
                 )
 
+                # Build the exclusion predicate as a proper array (one -name PATTERN pair
+                # per element) rather than a single command-substituted string: passing it
+                # through printf/unquoted $(...) word-splits on whitespace but leaves the
+                # literal quote characters in each word, so `find` ends up matching against
+                # a filename that includes stray quotes -- which never matches anything,
+                # silently turning the whole exclusion list into a no-op.
+                exclude_args=()
+                for pat in "${{exclude_patterns[@]}}"; do
+                    exclude_args+=(! -name "$pat")
+                done
+
                 find "$scratch_bamos_dir" -maxdepth 1 -type f \
-                    $(printf '! -name "%s" ' "${{exclude_patterns[@]}}") \
+                    "${{exclude_args[@]}}" \
                     -exec cp {{}} "{params.bamos_intermediate_final}/" \\;
 
                 echo "Intermediate files copied successfully"

@@ -4,6 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.8%20%7C%203.9%20%7C%203.10-blue.svg)](https://www.python.org/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://stylianosc.github.io/leukoquant/)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22012619.svg)](https://doi.org/10.5281/zenodo.22012619)
 
 **Lesion-informed white matter damage metrics toolkit for cerebral small vessel disease.**
 
@@ -13,7 +14,7 @@ LeukoQuant provides a complete, reproducible pipeline from raw MRI scans to quan
 
 > **Status:** LeukoQuant is currently available as a pre-release to support open science initiatives. A manuscript detailing the core methodology and our comprehensive clinical validation across the ADNI, OASIS Brain, and EPAD cohorts is currently in preparation.
 >
-> **Citation:** If you use this software in the meantime, please cite it via our Zenodo DOI: [Insert DOI]. If you are planning a large-scale clinical application, please contact the authors as our primary validation manuscript is imminent.
+> **Citation:** If you use this software in the meantime, please cite it via our Zenodo DOI: [10.5281/zenodo.22012619](https://doi.org/10.5281/zenodo.22012619). If you are planning a large-scale clinical application, please contact the authors as our primary validation manuscript is imminent.
 
 ---
 
@@ -50,6 +51,7 @@ Raw MRI (T1, FLAIR, DWI)
 | 16 GB RAM               | -                      | Recommended                                                                                                                                 |
 | 50 GB free disk         | -                      | Containers + outputs                                                                                                                        |
 | FreeSurfer licence      | -                      | Required for `process-all` / `process-recon`. Free from [surfer.nmr.mgh.harvard.edu](https://surfer.nmr.mgh.harvard.edu/registration.html) |
+| NVIDIA GPU (optional)   | `nvidia-smi`           | Optional for `--gpu` acceleration (`process-gif`, `process-bamos`). Requires NVIDIA Driver ≥ 450.80 (recommended ≥ 520.61, CUDA 11.8 compatible). CUDA runtime libraries download automatically on first use — no manual setup needed. |
 
 **Windows only - install WSL2 first:**
 
@@ -155,10 +157,11 @@ If you use LeukoQuant in your research, please cite (also available as [CITATION
 ```bibtex
 @software{leukoquant2026,
   author    = {Charalampous, Stylianos and Barkhof, Frederik and Cardoso, M. Jorge and Sudre, Carole},
-  title     = {{leukoquant}: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease},
+  title     = {{LeukoQuant}: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease},
   year      = {2026},
-  version   = {1.5.0},
+  version   = {1.6.0},
   url       = {https://github.com/stylianosc/leukoquant},
+  doi       = {10.5281/zenodo.22012619},
   license   = {Apache-2.0}
 }
 ```

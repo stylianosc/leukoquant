@@ -22,6 +22,9 @@ co-registration; the parcellation is in T1 space.
 
 Outputs are written to `{output_dir}/{subject}/gif/outputs/`.
 
+!!! tip "Automatic CUDA Library Download"
+    When `--gpu` is enabled, LeukoQuant **automatically downloads** the required CUDA runtime libraries from Hugging Face into `leukoquant/external/niftyreg/gpu/lib/` on first use. You do **not** need to manually download or configure any CUDA libraries.
+
 ## Parameters
 
 | Flag | Short | Type | Default | Required | Description |
@@ -33,6 +36,7 @@ Outputs are written to `{output_dir}/{subject}/gif/outputs/`.
 | `--output-dir` | `-o` | `path` | - | **Yes**\*\* | Root output directory |
 | `--scheduler` | `-s` | `choice` | `local` | No | Execution scheduler: `local` or `sge` |
 | `--cores` | `-c` | `int` | `1` | No | Number of Snakemake cores |
+| `--gpu` | - | flag | `False` | No | Enable CUDA GPU acceleration for GIF's registration steps (requires an NVIDIA GPU + driver). Downloads required CUDA libraries from Hugging Face on first use. Default: CPU-only. |
 | `--config-yaml` | - | `path` | `None` | No | YAML file supplying defaults for any of the above - see [Config file](#config-file-config-yaml) below |
 | `--force` | - | flag | `False` | No | Force-rerun GIF segmentation even if outputs already exist |
 | `--verbose` | `-v` | flag | `False` | No | Print Snakemake stdout to the console |
@@ -65,6 +69,7 @@ Recognized keys:
 | `output_dir` | `--output-dir` |
 | `scheduler` | `--scheduler` |
 | `cores` | `--cores` |
+| `gpu` | `--gpu` |
 | `flair_db` | *(no CLI equivalent - YAML-only)* |
 | `keep_intermediate` | *(no CLI equivalent - YAML-only)* |
 
@@ -75,6 +80,7 @@ t1: "./data/{subject}/T1/I*.nii.gz"
 output_dir: ./outputs
 scheduler: sge
 cores: 4
+gpu: true
 ```
 
 ```bash
@@ -126,6 +132,13 @@ leukoquant process-gif \
   --t1 ./data/sub-001/T1/scan.nii.gz \
   --output-dir ./outputs
 
+# Single subject, GPU-accelerated (CUDA)
+leukoquant process-gif \
+  --subject sub-001 \
+  --t1 ./data/sub-001/T1/scan.nii.gz \
+  --output-dir ./outputs \
+  --gpu
+
 # Multiple subjects, FLAIR only, SGE cluster
 leukoquant process-gif \
   --subject ./subjects.txt \
@@ -133,13 +146,14 @@ leukoquant process-gif \
   --output-dir ./outputs \
   --scheduler sge
 
-# Multiple subjects, T1 + FLAIR (T1 is primary input)
+# Multiple subjects, T1 + FLAIR (T1 is primary input), GPU on SGE cluster
 leukoquant process-gif \
   --subject ./subjects.txt \
   --t1    ./data/{subject}/T1/I*.nii.gz \
   --flair ./data/{subject}/FLAIR/I*.nii.gz \
   --output-dir ./outputs \
-  --scheduler sge
+  --scheduler sge \
+  --gpu
 ```
 
 ## See also

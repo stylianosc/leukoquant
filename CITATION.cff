@@ -1,10 +1,11 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 type: software
-title: "leukoquant: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease"
-version: 1.5.0
-date-released: 2026-08-19
+title: "LeukoQuant: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease"
+version: 1.6.0
+date-released: 2026-09-15
 license: Apache-2.0
+doi: 10.5281/zenodo.22012619
 repository-code: "https://github.com/stylianosc/leukoquant"
 url: "https://stylianosc.github.io/leukoquant/"
 authors:

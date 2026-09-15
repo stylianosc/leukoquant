@@ -124,6 +124,12 @@ rule dti:
         time="24:00:00",
         scratch_size=0.25*1024,
         name="dtifit",
+        # Caps how many tasks of this array SGE dispatches at once (qsub -tc)
+        # -- see noddi_workflow.smk's identical resource for the 2026-08-29
+        # SAN-overload hang this guards against (short, fast-fitting tasks
+        # like dti are the ones a backlog release can burst-start all at
+        # once). Overridable via config["task_concurrency"].
+        sge_task_concurrency = config.get("task_concurrency", 50),
         workdir=lambda wildcards: f"{OUTPUT_DIR}/{wildcards.subject}/{TOOL_NAME}",
     shell:
         """
@@ -157,10 +163,18 @@ rule dti:
         fi
 
         # Prepare DWI (writes data.nii.gz, bvecs, bvals, metadata.json to scratch_work_dir)
+        # Built as a string and run via `eval`, not a bare unquoted expansion: a plain
+        # $dwi_prepare_cmd expansion word-splits on whitespace but does NOT re-parse
+        # embedded quote characters as shell syntax, so quoting {params.dwi_sing} inside
+        # the string would pass the literal quote characters to dwi_utils.py as part of
+        # the path -- a real bug, not just a hypothetical one. `eval` re-parses the
+        # string as shell syntax, so the quotes below are honoured correctly. This is
+        # safe here because every substituted value is a pipeline-internal Snakemake
+        # param, never attacker- or user-supplied input.
         echo "Starting input preparation..."
-        dwi_prepare_cmd="python /leukoquant/leukoquant/utils/dwi_utils.py --dwi {params.dwi_sing} $bvecs_arg $bvals_arg --outdir $scratch_work_dir"
+        dwi_prepare_cmd="python /leukoquant/leukoquant/utils/dwi_utils.py --dwi \"{params.dwi_sing}\" $bvecs_arg $bvals_arg --outdir \"$scratch_work_dir\""
         echo "Command: $dwi_prepare_cmd"
-        $dwi_prepare_cmd
+        eval "$dwi_prepare_cmd"
 
         dwi_output="$scratch_work_dir/data.nii.gz"
         brain_mask_output="$scratch_work_dir/brain_mask.nii.gz"

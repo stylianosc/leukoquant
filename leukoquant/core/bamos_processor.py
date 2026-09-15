@@ -21,7 +21,7 @@ from leukoquant.utils.container_utils import (
 )
 from leukoquant.utils.external_utils import _find_gif_home_dir
 from leukoquant.utils.bind_utils import dir_level_bind_files, consolidate_bind_entries
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,8 @@ class BaMoSProcessor:
                   cores: int = 1,
                   keep_intermediate: bool = False,
                   force_rules: Optional[List[str]] = None,
-                  verbose: bool = False) -> Tuple[str, str]:
+                  verbose: bool = False,
+                  use_gpu: bool = False) -> Tuple[str, str]:
         """Run BaMoS lesion detection for one or more subjects.
 
         Args:
@@ -171,6 +172,8 @@ class BaMoSProcessor:
             + [f"{str(scratch_dir.absolute())}:{scratch_dir_sing}"]
         )
         singularity_bind = "--bind " + ",".join(bind_parts)
+        if use_gpu:
+            singularity_bind += " --nv"
 
         workflow_dir = self.leukoquant_dir / "workflow" / "workflows"
         snakefile = workflow_dir / "bamos_workflow.smk"
@@ -193,6 +196,7 @@ class BaMoSProcessor:
             "opt": opt,
             "jump_start": jump_start,
             "leukoquant_parent_dir": str(self.leukoquant_parent_dir.absolute()),
+            "use_gpu": use_gpu,
             **({"gif_home_host": str(gif_software_path.absolute())} if gif_software_path else {}),
         }
 
@@ -212,7 +216,6 @@ class BaMoSProcessor:
             "--jobs", "unlimited",
             "--max-jobs-per-timespan", "75000/1s",
             "--drop-metadata",
-            "--immediate-submit", "--notemp",
             # Cold NFS mounts on some compute nodes exceed the default 5s.
             "--latency-wait", "60",
             "--software-deployment-method", "apptainer",
@@ -221,11 +224,20 @@ class BaMoSProcessor:
         ]
 
         if scheduler == "sge":
+            # --immediate-submit/--notemp only make sense (and only work)
+            # under an actual submission executor -- without --executor sge,
+            # Snakemake has no way to run the rules it's told to treat as
+            # already-submitted, and fails with "local rules cannot run when
+            # --immediate-submit is specified" (confirmed 2026-08-25: this
+            # was previously unconditional, breaking --scheduler local
+            # entirely). Matches zscore_processor.py's already-correct gating.
             snakemake_cmd.extend([
+                "--immediate-submit", "--notemp",
                 "--executor", "sge"
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         # Explicitly target BaMoS's own `rule all` so that imported module rules
         # (e.g. gif_all from the GIF module) don't become the default target.
         snakemake_cmd.append("all")
@@ -263,7 +275,8 @@ def apply_bamos(subject_input: Optional[str] = None,
                 keep_intermediate: bool = False,
                 force_rules: Optional[List[str]] = None,
                 verbose: bool = False,
-                config_yaml: Optional[str] = None) -> dict:
+                config_yaml: Optional[str] = None,
+                use_gpu: bool = False) -> dict:
     """Run BaMoS and return a summary dict.
 
     CLI / caller arguments take priority over values in ``config_yaml`` when
@@ -304,6 +317,7 @@ def apply_bamos(subject_input: Optional[str] = None,
             keep_intermediate=keep_intermediate,
             force_rules=force_rules,
             verbose=verbose,
+            use_gpu=use_gpu,
         )
         print("✅ BaMoS job submitted successfully")
         return {"success": True, "job_id": job_id, "results_dir": results_dir,

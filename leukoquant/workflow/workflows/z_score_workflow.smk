@@ -18,7 +18,7 @@ LEUKOQUANT_PARENT_DIR = config.get("leukoquant_parent_dir")
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
 
 from leukoquant.utils.z_score_utils import get_t1_path, get_metric_path, get_dwi_path, get_bval_path, translate_path
-from leukoquant.utils.container_utils import ensure_container
+from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_gpu, ensure_niftyreg_cuda_libs
 
 
 # ---------------------------------------------------------------------------
@@ -103,6 +103,19 @@ CONTAINER_SIF = os.path.join(
     config.get("container_name", "freesurfer_unified_container") + ".sif"
 )
 ensure_container(CONTAINER_SIF)
+
+# Opt-in GPU acceleration for NiftyReg registration steps (default off,
+# CPU-only behaviour unchanged). Only downloads the CUDA NiftyReg build
+# when actually requested. See leukoquant/utils/container_utils.py.
+USE_GPU = config.get("use_gpu", False)
+PLATF = 1 if USE_GPU else 0
+# NiftyReg's build is a single unified binary supporting both -platf 0 (CPU)
+# and -platf 1 (CUDA), so both ensure calls run unconditionally, not gated
+# behind USE_GPU -- there's no separate CPU-only NiftyReg build to fall back
+# to (confirmed 2026-08-25: NIFTYREG_GPU_BIN is the only binary path
+# z_score_calc.sh ever references, regardless of --platf).
+ensure_niftyreg_gpu(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
+ensure_niftyreg_cuda_libs(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
 
 BIND_MAP        = config.get("singularity_binds", {})
 CALC_SCRIPT_SIF = "/leukoquant/leukoquant/utils/z_score_calc.sh"
@@ -212,6 +225,24 @@ _n_metrics = max(len(METRICS), 1)
 # x2: per-healthy registered files (IDX/*.nii.gz) plus the merged 4D
 # concatenation per metric, both scaling with num_healthy * n_metrics.
 _healthy_registration_scratch_mb = 2 * num_healthy * _n_metrics * _per_registered_metric_mb
+# materialize_to_scratch() in z_score_calc.sh (added to cut SAN load) copies
+# each healthy subject's own T1 and metric *source* files into this same
+# per-job scratch too -- a third component this formula didn't originally
+# account for. Confirmed 2026-08-22 via stage_census.py --detailed as the
+# real cause of a fresh wave of "No space left on device" failures
+# (undersized scratch_size => SGE overpacks a node with more concurrent
+# jobs than it can actually fit): EPAD's 478 disk-full failures vs ADNI3's
+# 33/OASIS3's 55 tracks directly with EPAD having the largest healthy
+# cohort (72 vs 46/57), i.e. the largest untracked materialize_to_scratch
+# footprint per job. One T1 copy per healthy subject, one metric-source
+# copy per (healthy subject, metric) pair -- same order of magnitude as the
+# registered-output estimates above, since it's copying a comparable
+# number and size of files.
+_per_healthy_t1_copy_mb = 16  # skull-stripped T1, generous estimate
+_materialize_scratch_mb = (
+    num_healthy * _per_healthy_t1_copy_mb
+    + num_healthy * _n_metrics * _per_registered_metric_mb
+)
 # Capped at 15GB (not the old fixed 10GB) -- confirmed 2026-08-18 that real
 # node-local /scratch0 capacity varies widely across the cluster, from
 # ~15GB to 160G+ depending on host. Kept at the smallest real node size
@@ -220,7 +251,8 @@ _healthy_registration_scratch_mb = 2 * num_healthy * _n_metrics * _per_registere
 # -- a single pathological job claiming a whole small node's scratch is an
 # acceptable tradeoff against that.
 ZSCORE_SCRATCH_MB = min(
-    int(_target_dwi_scratch_mb + _healthy_registration_scratch_mb), 15 * 1024
+    int(_target_dwi_scratch_mb + _healthy_registration_scratch_mb + _materialize_scratch_mb),
+    15 * 1024,
 )
 
 # Per-job memory (see the z_score rule's `resources:` below). fsl_glm
@@ -286,12 +318,47 @@ rule z_score:
         target_t1      = lambda wildcards: _target_t1_map[wildcards.subject],
         demographics   = [_demographics_path] if _demographics_path else [],
         healthy_t1s    = _h_ht1s,
-        target_metrics = lambda wildcards: _target_metrics_map[wildcards.subject],
-        healthy_metrics = _h_hmetrics,
+        # ancient() -- target_metrics/healthy_metrics are DTI/NODDI's own raw
+        # per-voxel maps (dti/outputs/fa.nii.gz etc, noddi/outputs/odi.nii.gz --
+        # see process_all_workflow.smk's z_score_metrics default), not any
+        # metrics-gif/metrics-fs output ("metrics" is an overloaded name here:
+        # it just means "map z-score computes a statistic for", unrelated to
+        # the metrics-gif/metrics-fs pipeline *stage*, which actually runs
+        # after z-score, not before it). These DTI/NODDI maps routinely get
+        # rewritten with identical content whenever process-all's backlog
+        # reprocesses an upstream stage. Without ancient(), that mtime bump
+        # makes Snakemake treat this rule as stale and DELETE the existing
+        # z-score outputs before rerunning -- confirmed as real data loss on
+        # 2026-08-24/25: 3 ADNI3 subjects (subj-002-s-6007/6009/6030) had valid
+        # z-score outputs at 10:54, then lost them to this cycle, landing on
+        # the (separately fixed) diff2t1 cache-race bug when Snakemake reran
+        # z_score_calc.sh -- permanently losing already-good results until the
+        # next successful rerun. (The originally-recorded timeline pinned the
+        # trigger to metrics-gif's tract_level_metrics.csv mtime; that was
+        # this same investigation's own mislabeling of "metrics" -- the real
+        # trigger is a DTI/NODDI map getting reprocessed, per the actual
+        # target_metrics/healthy_metrics paths above.) ancient() still
+        # requires the file to exist (the DAG/hold_jid ordering is unaffected),
+        # it just stops its timestamp alone from invalidating an already-complete
+        # z-score result. healthy_metrics carries the larger blast radius here --
+        # one healthy subject's reprocessing would otherwise invalidate z-score
+        # for every target subject sharing that cohort, not just one.
+        target_metrics = lambda wildcards: [ancient(p) for p in _target_metrics_map[wildcards.subject]],
+        healthy_metrics = [ancient(p) for p in _h_hmetrics],
+        # ancient() -- under process-all, these paths are tracula_dwi()'s output
+        # (process_all_workflow.smk), i.e. TRACULA's preprocessed DWI, not a raw
+        # scan. It's exactly the same kind of pipeline-regenerated file as
+        # target_metrics/healthy_metrics above (see that comment for the
+        # original 2026-08-24/25 data-loss incident this pattern guards
+        # against): whenever process-all's backlog reprocesses tracula for any
+        # reason (e.g. redeploying a tracula fix across all datasets), affected
+        # subjects' dwi.nii.gz gets rewritten with identical content but a
+        # fresh mtime, which without ancient() would make Snakemake treat every
+        # z-score output depending on it as stale and delete+rerun it.
         dwis  = lambda wildcards: (
-            [_target_dwi_map[wildcards.subject]] + _h_healthy_dwis
+            [ancient(p) for p in [_target_dwi_map[wildcards.subject]] + _h_healthy_dwis]
             if METRIC_SPACE == "dwi" else
-            ([_target_dwi_map[wildcards.subject]] if OUTPUT_SPACE == "dwi" and _target_dwi_map else [])
+            ([ancient(_target_dwi_map[wildcards.subject])] if OUTPUT_SPACE == "dwi" and _target_dwi_map else [])
         ),
         bvals = lambda wildcards: (
             [_target_bval_map[wildcards.subject]] + _h_healthy_bvals
@@ -303,8 +370,25 @@ rule z_score:
         # subject is expected to eventually produce all of these, with
         # Snakemake's own DAG/hold_jid chaining waiting on dti/noddi as
         # needed (see _target_metrics_map above).
+        #
+        # update() -- without it, Snakemake's Job.prepare() unconditionally
+        # deletes ALL 5 files before invoking the shell command whenever this
+        # rule is scheduled to rerun, even if the rerun decision turns out to
+        # be spurious (confirmed twice now: 2026-08-24/25 and 2026-08-29, in
+        # both cases dozens-to-hundreds of subjects with valid z-score output
+        # got wiped and had to be recomputed from scratch, for reasons that
+        # could not be pinned to any actual stale input on the second
+        # occurrence -- see the memory/changelog entry for this date).
+        # update() stops that pre-emptive deletion; z_score_calc.sh's own
+        # per-metric skip check (`if [[ -f "$OUTPUT_FILE" ]]; then continue`)
+        # then does the right thing on its own: a spurious rerun becomes a
+        # fast no-op instead of a full destructive recompute. Paired with
+        # z_score_calc.sh's temp-file + atomic-rename write (2026-08-29) so a
+        # genuine rerun that gets killed mid-write can never leave a
+        # truncated file behind that this same skip check would later
+        # mistake for a complete one.
         z_scores = [
-            f"{OUTPUT_DIR}/{{subject}}/{{TOOL_NAME}}/outputs/{m}_z_score{FILENAME_SUFFIX}.nii.gz"
+            update(f"{OUTPUT_DIR}/{{subject}}/{TOOL_NAME}/outputs/{m}_z_score{FILENAME_SUFFIX}.nii.gz")
             for m in METRICS
         ],
     params:
@@ -328,6 +412,7 @@ rule z_score:
         dwis_sif            = lambda wildcards: _sif_target_dwis(wildcards.subject),
         bvals_sif           = lambda wildcards: _sif_target_bvals(wildcards.subject),
         threads             = config.get("threads", 4),
+        platf               = PLATF,
         log_file            = lambda wildcards: f"{OUTPUT_DIR}/{wildcards.subject}/{TOOL_NAME}/logs/z_score.log",
         error_file          = lambda wildcards: f"{OUTPUT_DIR}/{wildcards.subject}/{TOOL_NAME}/logs/z_score_error.log",
     container:
@@ -358,16 +443,24 @@ rule z_score:
         # large array fully unthrottled can overwhelm the NFS server and cause
         # a burst of transient "Read-only file system" errors on nearly every
         # task's very first write (observed: 352/353 tasks died this way on a
-        # single ADNI3 run). No limit by default (matches prior behavior);
-        # set config["task_concurrency"] / --task-concurrency to cap
-        # concurrently-running array tasks via SGE's -tc if this recurs.
+        # single ADNI3 run). No limit by default: z-score tasks run for
+        # hours (scale with healthy-cohort size, see `time` above), so a
+        # burst-start collision is comparatively rare and a flat concurrency
+        # cap would cost real throughput for a long-running stage (unlike
+        # noddi/dti's short tasks, which do get -tc 50 for exactly this
+        # reason -- see noddi_workflow.smk). Set config["task_concurrency"]
+        # / --task-concurrency to cap concurrently-running array tasks via
+        # SGE's -tc if this recurs here specifically.
         sge_task_concurrency = config.get("task_concurrency"),
+        sge_resources = ("gpu=true" if USE_GPU else ""),
+        sge_pe = ("gpu" if USE_GPU else None),
     shell:
         """
         source /leukoquant/leukoquant/utils/bash_utils.sh
         mkdir -p "$(dirname '{params.log_file}')"
         exec > '{params.log_file}'
         exec 2> '{params.error_file}'
+        require_gpu_if_platf1 '{params.platf}'
 
         # Point TMPDIR at per-job scratch (/scratch0), never the node's
         # local /tmp -- same pattern as tracula_workflow.smk. Without this,
@@ -379,11 +472,12 @@ rule z_score:
         # even after fixing the separate cleanup leak (see dwi_utils.py).
         MY_JOB_ID="$(get_job_id)"
         scratch_path=""
-        trap 'scratch_cleanup "$scratch_path"' EXIT INT TERM
+        trap 'ec=$?; echo "=== z-score finished: $(date -u "+%Y-%m-%d %H:%M:%S UTC") (exit code: $ec) ==="; scratch_cleanup "$scratch_path"' EXIT INT TERM
         # Isolated single-quoted assignment (never embedded inside a longer
         # double-quoted string) -- matches the only substitution form
         # confirmed to survive Snakemake's own templating intact.
         ZSCORE_TARGET_ID='{params.target_id}'
+        echo "=== z-score started: $(date -u '+%Y-%m-%d %H:%M:%S UTC') (target: $ZSCORE_TARGET_ID) ==="
         scratch_path="/scratch0/$USER/$MY_JOB_ID/zscore_$ZSCORE_TARGET_ID"
         mkdir -p "$scratch_path"
         export TMPDIR="$scratch_path/tmp"
@@ -419,6 +513,7 @@ rule z_score:
             --covariates      '{params.covariates}' \\
             --poly-terms      '{params.poly_terms}' \\
             --threads         '{params.threads}' \\
+            --platf           '{params.platf}' \\
             --metric-space    '{params.metric_space}' \\
             --output-space    '{params.output_space}' \\
             --healthy-t1s     {params.healthy_t1s_sif} \\

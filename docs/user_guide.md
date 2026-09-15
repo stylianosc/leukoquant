@@ -182,7 +182,12 @@ leukoquant process-all \
 ### Individual steps
 
 ```bash
+# GIF brain parcellation (CPU default)
 leukoquant process-gif   --subject sub-01 --t1 /data/sub-01_T1.nii.gz --output-dir /data/output
+
+# GIF brain parcellation with GPU acceleration (CUDA libraries download automatically on first run — no setup needed)
+leukoquant process-gif   --subject sub-01 --t1 /data/sub-01_T1.nii.gz --output-dir /data/output --gpu
+
 leukoquant process-bamos --subject sub-01 --flair /data/FLAIR.nii.gz --t1 /data/T1.nii.gz --gif-results-dir /data/gif --output-dir /data/output
 leukoquant process-dti   --subject sub-01 --dwi /data/DWI.nii.gz --bvecs /data/sub.bvec --bvals /data/sub.bval --mask /data/mask.nii.gz --output-dir /data/output
 leukoquant process-noddi --subject sub-01 --dwi /data/DWI.nii.gz --bvecs /data/sub.bvec --bvals /data/sub.bval --mask /data/mask.nii.gz --output-dir /data/output
@@ -195,6 +200,29 @@ leukoquant process-zscore  --healthy-list /data/healthy.txt --target-list /data/
 ```bash
 leukoquant process-all ... --scheduler sge --cores 16
 ```
+
+### GPU Acceleration
+
+GIF brain parcellation supports CUDA GPU acceleration for its NiftyReg registration steps (`reg_aladin` and `reg_f3d`), which significantly speeds up multi-atlas propagation and segmentation.
+
+To enable GPU acceleration, simply pass the `--gpu` flag:
+
+```bash
+leukoquant process-gif \
+  --subject sub-01 \
+  --t1 /data/sub-01_T1.nii.gz \
+  --output-dir /data/output \
+  --gpu
+```
+
+!!! tip "Automatic CUDA Library Setup — No Action Required"
+    You **do not need to manually download anything**, install a CUDA development toolkit, or set up a Hugging Face account.
+
+    When `--gpu` is run for the first time, LeukoQuant **automatically downloads** the required CUDA runtime libraries (`cuSOLVER`, `cuBLAS`, `cuBLASLt`, `cuSPARSE`, ~1.25 GB total) from Hugging Face into `leukoquant/external/niftyreg/gpu/lib/` and caches them locally for all subsequent runs. 
+
+    The only requirement on your machine is a standard NVIDIA GPU with compatible NVIDIA drivers.
+
+- **BaMoS integration:** If running end-to-end BaMoS (`leukoquant process-bamos --gpu`) without precomputed GIF results, the `--gpu` flag is automatically forwarded to accelerate the internal GIF prerequisite run.
 
 ### Using a YAML config file
 

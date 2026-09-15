@@ -24,7 +24,7 @@ from leukoquant.utils.container_utils import (
     MINICONDA_SIF_HF_PATH,
 )
 from leukoquant.utils.external_utils import check_sge_plugin
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +159,7 @@ class AtlasConverterProcessor:
             logger.info("Using local scheduler")
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
 

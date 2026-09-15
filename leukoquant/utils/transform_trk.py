@@ -19,6 +19,20 @@ from scipy.ndimage import map_coordinates, center_of_mass
 
 logger = logging.getLogger(__name__)
 
+# CUDA-enabled NiftyReg build, committed directly in the repo (CPU-compatible
+# by default via -platf 0, used only when --gpu is requested).
+# See leukoquant/utils/container_utils.py's ensure_niftyreg_gpu().
+NIFTYREG_GPU_BIN = "/leukoquant/leukoquant/external/niftyreg/gpu/bin"
+# Appended (not prepended): when apptainer's --nv injects a real driver
+# (typically at /.singularity.d/libs, ahead of anything set here), it must
+# win the dynamic linker's search over our own bundled stub. Our
+# libcuda.so.1 stub is a fallback for nodes with no real driver at all,
+# not something that should ever shadow a real one.
+os.environ["LD_LIBRARY_PATH"] = (
+    os.environ.get("LD_LIBRARY_PATH", "")
+    + ":/leukoquant/leukoquant/external/niftyreg/gpu/lib"
+)
+
 
 def _make_sft_safe(streamlines, reference, space, source_label=""):
     """Construct a StatefulTractogram, clamping any out-of-bounds streamline
@@ -188,11 +202,11 @@ def get_density_map_nifti(input_path, normalise=True):
     return nib.Nifti1Image(dm, sft.affine)
 
 
-def run_reg_resample(floating_path, reference_path, affine_file, output_path):
+def run_reg_resample(floating_path, reference_path, affine_file, output_path, threads=4, platf=0):
     """Run reg_resample to bring floating into reference space using an affine."""
     cmd = (
-        f"reg_resample -ref {reference_path} -flo {floating_path} "
-        f"-trans {affine_file} -inter 1 -res {output_path}"
+        f"{NIFTYREG_GPU_BIN}/reg_resample -ref {reference_path} -flo {floating_path} "
+        f"-trans {affine_file} -inter 1 -res {output_path} -omp {threads} -platf {platf}"
     )
     subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL)
 
@@ -298,6 +312,18 @@ def main():
         required=False,
         help="Optional path to output the generated density map from the verification TRK",
     )
+    parser.add_argument(
+        "--threads",
+        type=int,
+        default=4,
+        help="Number of threads for reg_resample (-omp)",
+    )
+    parser.add_argument(
+        "--platf",
+        type=int,
+        default=0,
+        help="NiftyReg platform for reg_resample: 0=CPU (default), 1=CUDA",
+    )
     args = parser.parse_args()
 
     if not args.output_trk and not args.output_vol:
@@ -350,6 +376,8 @@ def main():
                     reference_path=args.out_reference,
                     affine_file=args.affine,
                     output_path=args.output_vol,
+                    threads=args.threads,
+                    platf=args.platf,
                 )
                 os.remove(tmp)
 

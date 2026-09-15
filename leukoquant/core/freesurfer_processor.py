@@ -21,7 +21,7 @@ from leukoquant.utils.container_utils import (
     FREESURFER_SIF_HF_PATH,
 )
 from leukoquant.utils.external_utils import _resolve_fs_license
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 
 logger = logging.getLogger(__name__)
 
@@ -125,7 +125,6 @@ class FreeSurferProcessor:
             "--directory", str(out_path),
             "--cores", str(cores),
             "--jobs", "unlimited",
-            "--immediate-submit", "--notemp",
             # Cold NFS mounts on some compute nodes exceed the default 5s.
             "--latency-wait", "60",
             "--software-deployment-method", "apptainer",
@@ -134,7 +133,15 @@ class FreeSurferProcessor:
         ]
 
         if scheduler == "sge":
+            # --immediate-submit/--notemp only make sense (and only work)
+            # under an actual submission executor -- without --executor sge,
+            # Snakemake has no way to run the rules it's told to treat as
+            # already-submitted, and fails with "local rules cannot run when
+            # --immediate-submit is specified" (confirmed 2026-08-25: this
+            # was previously unconditional, breaking --scheduler local
+            # entirely). Matches zscore_processor.py's already-correct gating.
             snakemake_cmd.extend([
+                "--immediate-submit", "--notemp",
                 "--max-jobs-per-timespan", "75000/1s",
                 "--executor", "sge",
             ])
@@ -142,6 +149,7 @@ class FreeSurferProcessor:
             logger.info("Using local scheduler")
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
         env = os.environ.copy()

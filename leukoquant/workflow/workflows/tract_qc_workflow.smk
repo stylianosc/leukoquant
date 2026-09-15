@@ -187,8 +187,8 @@ if USE_PARCELLATION_SUFFIX:
                 mkdir -p "{params.sif_output_dir}"
                 python {params.qc_script} \
                     --subject {wildcards.subject} \
-                    --tractography-path {params.sif_tractography_path} \
-                    --output {params.sif_output_dir} \
+                    --tractography-path '{params.sif_tractography_path}' \
+                    --output '{params.sif_output_dir}' \
                     --skip-subject-dir
                 """
 
@@ -235,7 +235,7 @@ else:
             mkdir -p "{params.sif_output_dir}"
             python {params.qc_script} \
                 --subject {wildcards.subject} \
-                --tractography-path {params.sif_tractography_path} \
-                --output {params.sif_output_dir} \
+                --tractography-path '{params.sif_tractography_path}' \
+                --output '{params.sif_output_dir}' \
                 --skip-subject-dir
             """

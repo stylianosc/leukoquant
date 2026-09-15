@@ -53,14 +53,17 @@ def _exit_on_failure(result: dict) -> dict:
               help='Optional YAML config for GIF inputs (CLI options override config values)')
 @click.option('--force', is_flag=True, default=False,
               help='Force-rerun GIF segmentation even if outputs already exist')
+@click.option('--gpu', is_flag=True, default=False,
+              help='Use CUDA-accelerated NiftyReg for GIF\'s registration steps (requires an NVIDIA GPU + driver '
+                   'on the execution node). Downloads the CUDA NiftyReg build on first use. Default: CPU-only.')
 def process_gif_cmd(subject: Optional[str] = None, output_dir: Optional[str] = None,
                     t1: Optional[str] = None, flair: Optional[str] = None,
                     verbose: bool = False, mask_file: Optional[str] = None,
                     scheduler: Optional[str] = None, cores: Optional[int] = None,
-                    config_yaml: Optional[str] = None, force: bool = False) -> dict:
+                    config_yaml: Optional[str] = None, force: bool = False, gpu: bool = False) -> dict:
     """Process image(s) with GIF segmentation. At least one of --t1 or --flair is required (via argument or --config-yaml)."""
     check_sge_plugin(scheduler or "local")
-    return _exit_on_failure(process_gif(subject, output_dir, t1, flair, verbose, mask_file, scheduler, cores, force, config_yaml))
+    return _exit_on_failure(process_gif(subject, output_dir, t1, flair, verbose, mask_file, scheduler, cores, force, config_yaml, gpu))
 
 
 @main.command('process-bamos')
@@ -82,13 +85,29 @@ def process_gif_cmd(subject: Optional[str] = None, output_dir: Optional[str] = N
               help='Optional YAML config for BaMoS inputs (CLI options override config values)')
 @click.option('--force', is_flag=True, default=False,
               help='Force-rerun BaMoS lesion detection even if outputs already exist')
+# --gpu re-added 2026-08-28 with narrower scope than before: BaMoS's own
+# EM/segmentation binaries (Seg_BiASM, Seg_Analysis) never had GPU support,
+# and its own internal NiftyReg registration substeps stay CPU-only
+# unconditionally now (bamos_workflow.smk hardcodes USE_GPU=False for those,
+# regardless of this flag) -- it wasn't worth occupying a GPU node for.
+# This flag now ONLY controls whether the internal GIF prerequisite run
+# (triggered automatically when --gif-results-dir isn't given) uses GPU, so
+# a single `process-bamos --gpu` call still does GPU-accelerated GIF +
+# CPU-only BaMoS in one command, without needing a separate process-gif
+# --gpu invocation first.
+@click.option('--gpu', is_flag=True, default=False,
+              help="Use CUDA-accelerated NiftyReg for this command's internal GIF prerequisite run only "
+                   "(requires an NVIDIA GPU + driver on the execution node; downloads the CUDA NiftyReg "
+                   "build on first use). BaMoS's own registration/segmentation steps always run CPU-only "
+                   "regardless of this flag. No effect if --gif-results-dir is given (no internal GIF run "
+                   "happens in that case). Default: CPU-only throughout.")
 def process_bamos_cmd(subject: Optional[str] = None, flair: Optional[str] = None, t1: Optional[str] = None,
                       output_dir: Optional[str] = None, gif_results_dir: Optional[str] = None,
                       verbose: bool = False, scheduler: Optional[str] = None, cores: Optional[int] = None,
-                      config_yaml: Optional[str] = None, force: bool = False) -> dict:
+                      config_yaml: Optional[str] = None, force: bool = False, gpu: bool = False) -> dict:
     """Process FLAIR and T1 images with BaMoS lesion detection and corrections."""
     check_sge_plugin(scheduler or "local")
-    return _exit_on_failure(process_bamos(subject, flair, t1, output_dir, gif_results_dir, verbose, scheduler, cores, force, config_yaml))
+    return _exit_on_failure(process_bamos(subject, flair, t1, output_dir, gif_results_dir, verbose, scheduler, cores, force, config_yaml, gpu))
 
 
 @main.command('process-recon')
@@ -176,7 +195,10 @@ def process_noddi_cmd(subject: Optional[str] = None, dwi: Optional[str] = None, 
 @click.option('--config-yaml', required=False, type=click.Path(exists=True), help='Optional YAML config for z-score inputs (CLI options override config values)')
 @click.option('--force', is_flag=True, default=False,
               help='Force-rerun z-score computation even if outputs already exist')
-def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], metric: tuple, t1_path: Optional[str], demographics_csv: Optional[str], output_dir: Optional[str], covariates: Optional[str] = None, poly_terms: Optional[str] = None, metric_space: str = 't1', output_space: str = 't1', dwi_pattern: Optional[str] = None, bval_pattern: Optional[str] = None, skip_skullstrip_t1: bool = False, skip_skullstrip_dwi: bool = False, verbose: bool = False, scheduler: Optional[str] = None, cores: Optional[int] = None, task_concurrency: Optional[int] = None, config_yaml: Optional[str] = None, force: bool = False) -> dict:
+@click.option('--gpu', is_flag=True, default=False,
+              help='Use CUDA-accelerated NiftyReg for registration steps (requires an NVIDIA GPU + driver on '
+                   'the execution node). Downloads the CUDA NiftyReg build on first use. Default: CPU-only.')
+def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], metric: tuple, t1_path: Optional[str], demographics_csv: Optional[str], output_dir: Optional[str], covariates: Optional[str] = None, poly_terms: Optional[str] = None, metric_space: str = 't1', output_space: str = 't1', dwi_pattern: Optional[str] = None, bval_pattern: Optional[str] = None, skip_skullstrip_t1: bool = False, skip_skullstrip_dwi: bool = False, verbose: bool = False, scheduler: Optional[str] = None, cores: Optional[int] = None, task_concurrency: Optional[int] = None, config_yaml: Optional[str] = None, force: bool = False, gpu: bool = False) -> dict:
     """Compute Z-scores for targets against a healthy cohort."""
     check_sge_plugin(scheduler or "local")
     # Parse repeated metric mappings into a dict
@@ -214,6 +236,7 @@ def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], 
         task_concurrency=task_concurrency,
         config_yaml=config_yaml,
         force=force,
+        gpu=gpu,
     ))
 
 
@@ -247,6 +270,10 @@ def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], 
               help='Force-rerun metrics extraction (for the given --parcellation) even if '
                    'outputs already exist. Anything upstream that is already up to date '
                    '(recon-all, GIF, BaMoS, DTI, NODDI, TRACULA) is left untouched.')
+@click.option('--gpu', is_flag=True, default=False,
+              help='Use CUDA-accelerated NiftyReg for registration steps across the pipeline (requires an '
+                   'NVIDIA GPU + driver on the execution node). Downloads the CUDA NiftyReg build on first '
+                   'use. Default: CPU-only.')
 def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, flair: Optional[str] = None,
                     dwi: Optional[str] = None, output_dir: Optional[str] = None, bvecs: str = "",
                     bvals: str = "", mask: Optional[str] = None, verbose: bool = False,
@@ -254,11 +281,11 @@ def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, fla
                     healthy_subjects: Optional[str] = None, demographics_csv: Optional[str] = None,
                     covariates: Optional[str] = None, poly_terms: Optional[str] = None,
                     parcellation: str = 'freesurfer', config_yaml: Optional[str] = None,
-                    force: bool = False) -> dict:
+                    force: bool = False, gpu: bool = False) -> dict:
     """Run full pipeline: recon-all, bamos, gif, tracula, dti, noddi, metrics."""
     check_sge_plugin(scheduler or "local")
     return _exit_on_failure(process_all(subject, t1, flair, dwi, bvecs, bvals, output_dir, mask, verbose, scheduler, cores, skip_zscore,
-                       healthy_subjects, demographics_csv, covariates, poly_terms, parcellation, force, config_yaml))
+                       healthy_subjects, demographics_csv, covariates, poly_terms, parcellation, force, config_yaml, gpu))
 
 @main.command('process-atlas-conversion')
 @click.option('--subject', '-i', required=False,
@@ -407,6 +434,9 @@ def process_tracula_cmd(subject: Optional[str] = None, dwi: Optional[str] = None
 @click.option('--force', is_flag=True, default=False,
               help='Force-rerun metrics extraction (for the given --parcellation) even if outputs already exist')
 @click.option('--verbose', '-v', is_flag=True, help='Verbose output')
+@click.option('--gpu', is_flag=True, default=False,
+              help='Use CUDA-accelerated NiftyReg for registration steps (requires an NVIDIA GPU + driver on '
+                   'the execution node). Downloads the CUDA NiftyReg build on first use. Default: CPU-only.')
 def process_metrics_cmd(subject: Optional[str] = None,
                         tractography_path: Optional[str] = None,
                         t1_path: Optional[str] = None,
@@ -420,7 +450,8 @@ def process_metrics_cmd(subject: Optional[str] = None,
                         cores: Optional[int] = None,
                         config_yaml: Optional[str] = None,
                         force: bool = False,
-                        verbose: bool = False) -> dict:
+                        verbose: bool = False,
+                        gpu: bool = False) -> dict:
     """Compute metrics along tracts, lesions, and WMH regions."""
     check_sge_plugin(scheduler or "local")
     # Parse repeated metric mappings into a dict
@@ -453,6 +484,7 @@ def process_metrics_cmd(subject: Optional[str] = None,
         force=force,
         verbose=verbose,
         config_yaml=config_yaml,
+        gpu=gpu,
     ))
 
 

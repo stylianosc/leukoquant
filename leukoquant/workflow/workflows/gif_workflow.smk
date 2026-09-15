@@ -68,7 +68,7 @@ OUTPUT_DIR      = config.get("output_dir")
 OUTPUT_DIR_SING = config.get("output_dir_singularity", "/output")
 KEEP_INTERMEDIATE = config.get("keep_intermediate", False)
 GIF_DIR         = "/leukoquant/leukoquant/external/gif"
-GIF_SCRIPT      = GIF_DIR + "/GIF_111125.sh"
+GIF_SCRIPT      = GIF_DIR + "/GIF_200826.sh"
 TOOL_NAME       = "gif"
 
 # GIF database paths inside the container.
@@ -117,13 +117,31 @@ def _subject_gif_output_dir(subject):
     return f"{OUTPUT_DIR}/{subject}/{TOOL_NAME}/outputs"
 
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
-from leukoquant.utils.container_utils import ensure_container
+from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_cuda_libs
 
 CONTAINER_SIF = os.path.join(
     LEUKOQUANT_PARENT_DIR,
     "leukoquant/workflow/containers/miniconda_unified_container.sif",
 )
 ensure_container(CONTAINER_SIF)
+
+# GIF's bin_gpu/seg_GIF is a single unified binary supporting both -platf 0
+# (CPU) and -platf 1 (CUDA), so it dynamically links against NiftyReg's
+# cuSOLVER/cuBLAS/cuBLASLt/cuSPARSE dependency unconditionally (needed to
+# even start the process, regardless of which platform flag is used at
+# runtime) -- not gated behind USE_GPU below for that reason. Downloaded
+# into the SAME shared leukoquant/external/niftyreg/gpu/lib/ directory
+# every other NiftyReg-GPU-build consumer uses (not bin_gpu/ itself), with
+# GIF_200826.sh adding that one shared path to LD_LIBRARY_PATH -- avoids a
+# second ~1.25GB copy of these libraries.
+ensure_niftyreg_cuda_libs(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
+
+# Opt-in GPU acceleration for GIF's registration steps (default off, CPU-only
+# behaviour via -platf 0 unchanged). Unlike metrics/z-score/BaMoS, GIF's
+# bin_gpu/seg_GIF is fully self-contained (bundles its own CUDA driver stub +
+# libcudart.so.11.0 -- see GIF_200826.sh) so no download is ever needed here.
+USE_GPU = config.get("use_gpu", False)
+PLATF = 1 if USE_GPU else 0
 
 container:
     CONTAINER_SIF
@@ -204,6 +222,7 @@ rule run_gif:
         log_file=lambda wildcards: f"{OUTPUT_DIR_SING}/{_resolve_subject(wildcards)}/{TOOL_NAME}/logs/gif.log",
         error_file=lambda wildcards: f"{OUTPUT_DIR_SING}/{_resolve_subject(wildcards)}/{TOOL_NAME}/logs/gif_error.log",
         scratch_dir_sing=config.get("scratch_dir_singularity", "/scratch0"),
+        platf=PLATF,
     threads:
         1
     resources:
@@ -212,12 +231,15 @@ rule run_gif:
         scratch_size=0.5*1024,
         name="gif_processing",
         workdir=lambda wildcards: f"{OUTPUT_DIR}/{_resolve_subject(wildcards)}/{TOOL_NAME}",
+        sge_resources=("gpu=true" if USE_GPU else ""),
+        sge_pe=("gpu" if USE_GPU else None),
     shell:
         """
         source /leukoquant/leukoquant/utils/bash_utils.sh
         mkdir -p "$(dirname "{params.log_file}")"
         exec > "{params.log_file}"
         exec 2> "{params.error_file}"
+        require_gpu_if_platf1 "{params.platf}"
 
         echo "Date: $(date)"
         echo "Date: $(date)" >&2
@@ -293,6 +315,7 @@ rule run_gif:
             --filename "$primary_img" \
             --output-folder "$scratch_intermediate" \
             --threads {threads} \
+            --platf {params.platf} \
             $db_arg \
             $mask_arg
 

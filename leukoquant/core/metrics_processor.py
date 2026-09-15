@@ -16,7 +16,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from leukoquant.utils.subject_utils import read_subjects
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 from leukoquant.utils.container_utils import (
     ensure_container,
     FREESURFER_SIF_FILENAME,
@@ -205,7 +205,8 @@ class MetricsProcessor:
                     keep_intermediate: bool = False,
                     parcellation: str = "freesurfer",
                     force_rules: Optional[List[str]] = None,
-                    verbose: bool = False) -> Tuple[str, str]:
+                    verbose: bool = False,
+                    use_gpu: bool = False) -> Tuple[str, str]:
         """Run the metrics Snakemake workflow.
 
         Args:
@@ -324,6 +325,7 @@ class MetricsProcessor:
             "conda_env_name": "metrics_env",
             "verbose": verbose,
             "parcellations": [p.strip() for p in parcellation.split(",") if p.strip()],
+            "use_gpu": use_gpu,
         }
 
         if subjects_file:
@@ -355,6 +357,8 @@ class MetricsProcessor:
         # ------------------------------------------------------------------
         bind_str = ",".join(f"{host}:{container}" for host, container in bind_pairs)
         singularity_bind = f"--bind {bind_str}"
+        if use_gpu:
+            singularity_bind += " --nv"
 
         snakemake_cmd = [
             "snakemake",
@@ -379,6 +383,7 @@ class MetricsProcessor:
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
         #logger.info(f"Singularity binds: {bind_str}")
@@ -422,6 +427,7 @@ def apply_metrics(
     force_rules: Optional[List[str]] = None,
     verbose: bool = False,
     config_yaml: Optional[str] = None,
+    gpu: bool = False,
 ) -> dict:
     """Run the metrics workflow and return a summary dict.
 
@@ -502,6 +508,7 @@ def apply_metrics(
             parcellation=parcellation,
             force_rules=force_rules,
             verbose=verbose,
+            use_gpu=gpu,
         )
         print("✅ Metrics calculation job submitted successfully")
         return {

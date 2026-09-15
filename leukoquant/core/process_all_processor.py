@@ -10,6 +10,8 @@ paid only once. The smk workflow fans out per-subject jobs via wildcards
 import logging
 import os
 import sys
+import tempfile
+import traceback
 from pathlib import Path
 from typing import List, Optional, Tuple
 
@@ -34,6 +36,7 @@ try:
         SharedFSUsage,
         StorageSettings,
     )
+    from snakemake.settings.enums import RerunTrigger
 except ImportError:
     from snakemake.settings import (  # type: ignore[no-redef]
         ConfigSettings,
@@ -48,6 +51,7 @@ except ImportError:
         SchedulingSettings,
         SharedFSUsage,
         StorageSettings,
+        RerunTrigger,
     )
 
 from snakemake_executor_plugin_sge import ExecutorSettings as SgeExecutorSettings
@@ -164,7 +168,8 @@ class ProcessAllProcessor:
                         poly_terms: Optional[str] = None,
                         parcellation: str = "freesurfer",
                         force_rules: Optional[List[str]] = None,
-                        verbose: bool = False) -> Tuple[str, str]:
+                        verbose: bool = False,
+                        use_gpu: bool = False) -> Tuple[str, str]:
         """Run process-all for one or more subjects in a single Snakemake call.
 
         All subjects share one DAG-build pass and one container-discovery step,
@@ -409,6 +414,8 @@ class ProcessAllProcessor:
         # (one per filesystem root plus shared dirs), so the --bind string is short
         # enough to pass directly via --apptainer-args without hitting ARG_MAX.
         singularity_bind = "--bind " + ",".join(bind_entries)
+        if use_gpu:
+            singularity_bind += " --nv"
 
         # ── Write config ─────────────────────────────────────────────────────
         # z-score config keys (optional)
@@ -444,6 +451,7 @@ class ProcessAllProcessor:
             # {parcellation} wildcard without string-splitting at workflow load time.
             "parcellations": [p.strip() for p in parcellation.split(",") if p.strip()]
                               if isinstance(parcellation, str) else list(parcellation),
+            "use_gpu": use_gpu,
         }
 
         config_file = str(base_out / "process_all_config.yaml")
@@ -551,13 +559,23 @@ class ProcessAllProcessor:
             # regardless of whether they come from Python logging, C extensions,
             # or inherited fds in subprocesses. The Snakemake file log writes to
             # a separate named fd (not fd 1 or 2) so it is unaffected.
+            #
+            # Captured to a temp file rather than /dev/null: some Snakemake-
+            # internal failures (e.g. the renamed z_score_z_score rule, see the
+            # except block below) only print their real diagnostic to stderr at
+            # the moment of failure -- the exception object itself stringifies
+            # to nothing but the bare rule name. Discarding that output
+            # unconditionally meant every such failure was undiagnosable even
+            # with a full traceback, since the traceback only shows our own
+            # call into execute_workflow(), not Snakemake's own explanation.
+            # Read back and included in the raised message on failure only;
+            # discarded (like before) on success.
             output_settings = OutputSettings()
-            _devnull_fd = os.open(os.devnull, os.O_WRONLY)
+            _capture_file = tempfile.TemporaryFile(mode="w+b")
             _saved_stdout_fd = os.dup(1)
             _saved_stderr_fd = os.dup(2)
-            os.dup2(_devnull_fd, 1)
-            os.dup2(_devnull_fd, 2)
-            os.close(_devnull_fd)
+            os.dup2(_capture_file.fileno(), 1)
+            os.dup2(_capture_file.fileno(), 2)
             try:
                 with SnakemakeApi(output_settings) as snk:
                     workflow_api = snk.workflow(
@@ -574,6 +592,27 @@ class ProcessAllProcessor:
                         dag_settings=DAGSettings(
                             targets=["all"],
                             forcerun=frozenset(force_rules or []),
+                            # Snakemake's default rerun_triggers includes CODE
+                            # (and PARAMS/INPUT/SOFTWARE_ENV) on top of the
+                            # always-on mtime staleness check -- meaning any
+                            # edit to a workflow file's shell/params (even an
+                            # unrelated bugfix in a rule that has nothing to
+                            # do with a given subject) makes every subject
+                            # with recorded metadata for that rule look
+                            # "changed" and get rescheduled, real work or not.
+                            # Confirmed as the actual cause of two real
+                            # incidents (2026-08-24/25 and 2026-08-29): a
+                            # routine same-day edit to z_score_workflow.smk
+                            # correctly-per-Snakemake's-own-logic but
+                            # incorrectly-for-our-purposes re-flagged ~250
+                            # already-complete subjects as needing a rerun.
+                            # Restricting to MTIME alone keeps genuine
+                            # staleness detection (an input file actually
+                            # changed) working exactly as before -- that
+                            # check isn't gated by rerun_triggers at all --
+                            # while removing the "we edited the pipeline
+                            # today" false-positive path entirely.
+                            rerun_triggers=frozenset({RerunTrigger.MTIME}),
                         ),
                     )
                     success = dag_api.execute_workflow(
@@ -590,6 +629,11 @@ class ProcessAllProcessor:
                 os.close(_saved_stdout_fd)
                 os.close(_saved_stderr_fd)
 
+            # Only reached on success (an exception in the block above jumps
+            # straight to the `except` below) -- captured output was never
+            # needed, discard it.
+            _capture_file.close()
+
             # With --immediate-submit (SGE), the aggregation rule `all` is a
             # local rule with no shell command and is always skipped, causing
             # execute_workflow() to return False even though all compute jobs
@@ -599,7 +643,45 @@ class ProcessAllProcessor:
                 raise RuntimeError("Snakemake workflow returned failure")
             return "0", str(base_out)
         except Exception as e:
-            raise RuntimeError(f"process-all failed: {e}")
+            # Some Snakemake-internal exceptions (e.g. those raised for a
+            # `use rule * from <module> as <prefix>_*`-renamed rule, which is
+            # how every process-all sub-workflow -- metrics, z_score, etc. --
+            # is composed) stringify to nothing but the (renamed) rule name,
+            # with zero context about which subject or what actually went
+            # wrong (observed: a KeyError-style "z_score_z_score" with no
+            # further detail, since Snakemake renames the z_score module's
+            # own `z_score` rule to `z_score_z_score` here). str(e) alone is
+            # not enough to diagnose that. Log the full traceback (stdout/
+            # stderr have already been restored by the `finally` above) and
+            # include the exception's class name in the raised message so
+            # at least the failure mode is visible without re-reading logs.
+            #
+            # Snakemake's own real diagnostic for this kind of failure is
+            # printed to stderr at the moment it happens, not embedded in the
+            # exception object -- normally that's exactly what the fd
+            # redirect above discards. Tail the last portion of what was
+            # captured (bounded, not the whole file: a real multi-subject DAG
+            # run can produce a capture file well into the hundreds of MB)
+            # and fold it into the raised message so it survives instead of
+            # vanishing into /dev/null.
+            _CAPTURE_TAIL_BYTES = 64 * 1024
+            captured_tail = ""
+            try:
+                _capture_file.seek(0, os.SEEK_END)
+                _capture_size = _capture_file.tell()
+                _capture_file.seek(max(0, _capture_size - _CAPTURE_TAIL_BYTES))
+                captured_tail = _capture_file.read().decode(errors="replace")
+                _capture_file.close()
+            except (NameError, OSError, ValueError):
+                pass  # capture file was never created (exception before setup) or already closed
+
+            logging.exception("process-all: unhandled exception during DAG execution")
+            raise RuntimeError(
+                f"process-all failed: {type(e).__name__}: {e}\n"
+                f"{traceback.format_exc()}\n"
+                f"--- captured Snakemake stdout/stderr (last {_CAPTURE_TAIL_BYTES // 1024}KB) ---\n"
+                f"{captured_tail}"
+            )
 
 
 def apply_process_all(subject_input: Optional[str] = None,
@@ -620,7 +702,8 @@ def apply_process_all(subject_input: Optional[str] = None,
                       parcellation: str = "freesurfer",
                       force_rules: Optional[List[str]] = None,
                       verbose: bool = False,
-                      config_yaml: Optional[str] = None) -> dict:
+                      config_yaml: Optional[str] = None,
+                      gpu: bool = False) -> dict:
     """Run the full process-all pipeline and return a summary dict.
 
     CLI / caller arguments take priority over values in ``config_yaml`` when
@@ -682,6 +765,7 @@ def apply_process_all(subject_input: Optional[str] = None,
             parcellation=parcellation,
             force_rules=force_rules,
             verbose=verbose,
+            use_gpu=gpu,
         )
         print("✅ Full processing job submitted successfully", flush=True)
         return {"success": True, "results_dir": results_dir}

@@ -244,12 +244,29 @@ def _compute_load(mask_array: np.ndarray, region_array: np.ndarray, voxel_vol_mm
 def write_csv(df: pd.DataFrame, path: str) -> None:
     """
     Write DataFrame to CSV with logging.
+
+    Written to a temp path first, then atomically renamed into place
+    (os.replace, same guarantee as POSIX rename) -- if the process gets
+    killed mid-write (walltime, OOM, an unrelated `qdel`), the final path
+    either still holds the last fully-valid CSV or never existed, never a
+    truncated one. Paired with metrics_workflow.smk's update() flag on
+    these outputs: together, a subject that already has valid metrics is
+    never left with nothing just because Snakemake schedules the rule to
+    run again for an unrelated reason.
     """
     if df.empty:
         logger.warning("DataFrame is empty; no data to write.")
         return
 
-    df.to_csv(path, index=False)
+    # "_tmp" spliced in before the extension (not appended after, e.g. not
+    # "name.csv.tmp") -- pandas.to_csv() writes to the literal path given
+    # with no extension-sniffing, so this isn't strictly required the way
+    # it was for fslmaths, but keeping the same convention everywhere
+    # avoids ever having to re-derive that reasoning per call site.
+    root, ext = os.path.splitext(path)
+    tmp_path = f"{root}_tmp{ext}"
+    df.to_csv(tmp_path, index=False)
+    os.replace(tmp_path, path)
     logger.info("DataFrame written to: %s", path)
 
 def _compute_tiv_from_array(brain_array: np.ndarray, voxel_vol_mm3: float) -> float:
@@ -407,6 +424,72 @@ def _compute_whole_brain_metrics(
             row[f"{lesion_name}_load_pct"] = None
             row[f"{lesion_name}_volume_tiv_normalised_mm3"] = None
 
+
+    return pd.DataFrame([row])
+
+# ============================================================================
+# Metric family: whole-brain lesion microstructure
+# ============================================================================
+
+def _compute_whole_brain_lesion_microstructure_metrics(
+    subject: str,
+    map_arrays: Dict[str, np.ndarray],
+    lesion_arrays: Dict[str, np.ndarray],
+    binary_lesion_arrays: Dict[str, np.ndarray],
+    penumbras_arrays: Dict[str, np.ndarray],
+    dilated_lesion_arrays: Dict[str, np.ndarray],
+) -> pd.DataFrame:
+    """Compute whole-brain lesion-restricted microstructure metrics.
+
+    Same idea as the tract-level "lesion microstructure" / "penumbra
+    microstructure" families the tract loop below computes, just without the
+    tract-mask restriction -- every map is summarised over the WHOLE
+    lesion/penumbra/dilated-lesion region rather than its intersection with
+    one of the 42 tracts. This is the metric family a whole-brain-scope score
+    (e.g. Fazekas, a holistic visual rating) is actually comparable to; a
+    tract-restricted metric never is, since Fazekas has no per-tract
+    structure of its own.
+
+    Runs once per subject (no tract loop), reusing the exact lesion/map
+    arrays _load_inputs() already loaded for the tract-level pass below --
+    no new data loading, no new CLI flags.
+
+    Columns
+    -------
+    subject
+    {map}_{lesion}_map_wb_lesion_binary_{stat}
+        Map values inside the binary lesion mask (whole brain).
+    {map}_{lesion}_map_wb_lesion_pd_{stat}
+        Map values weighted by lesion probability density (whole brain).
+    {map}_{lesion}_map_wb_penumbra_{stat}
+        Map values in the penumbra ring around the lesion (whole brain).
+    {map}_{lesion}_map_wb_dilated_lesion_{stat}
+        Map values in the dilated-lesion (lesion + penumbra) region (whole brain).
+    {stat} is one of the _summary_nonzero() keys: min, max, mean, sum,
+    median, std, 25th, 75th, IQR, peak_width.
+    """
+    row: Dict[str, Any] = {"subject": subject}
+
+    for lesion_name, binary_array in binary_lesion_arrays.items():
+        lesion_pd_array = lesion_arrays.get(lesion_name)
+        penumbra_array = penumbras_arrays.get(lesion_name)
+        dilated_array = dilated_lesion_arrays.get(lesion_name)
+
+        for map_name, map_array in map_arrays.items():
+            regions: Dict[str, np.ndarray] = {
+                "map_wb_lesion_binary": map_array * binary_array,
+            }
+            if lesion_pd_array is not None:
+                regions["map_wb_lesion_pd"] = map_array * lesion_pd_array
+            if penumbra_array is not None:
+                regions["map_wb_penumbra"] = map_array * penumbra_array
+            if dilated_array is not None:
+                regions["map_wb_dilated_lesion"] = map_array * dilated_array
+
+            for suffix, region_values in regions.items():
+                stats = _summary_nonzero(region_values)
+                for stat_name, stat_value in stats.items():
+                    row[f"{map_name}_{lesion_name}_{suffix}_{stat_name}"] = stat_value
 
     return pd.DataFrame([row])
 
@@ -959,6 +1042,26 @@ def main() -> int:
     wb_csv = metrics_dir / "whole_brain_metrics.csv"
     print("✓ Whole Brain Metrics CSV saved")
     write_csv(wb_df, str(wb_csv))
+
+    # ── Metric family: whole-brain lesion microstructure ─────────────────────
+    # Deliberately NOT yet declared in metrics_workflow.smk's rule output: --
+    # see future_plans/whole_brain_lesion_metrics.md in leukoquant-experiments.
+    # Writing it unconditionally here lets every subject whose metrics rule
+    # fires from now on pick it up as a side effect of work already scheduled,
+    # with no extra Snakemake-triggered reruns; declaring it as a tracked
+    # output later is a separate, deliberate step for backfilling subjects
+    # that finish before that point.
+    wb_lesion_df = _compute_whole_brain_lesion_microstructure_metrics(
+        subject=args.subject,
+        map_arrays=inputs.map_arrays,
+        lesion_arrays=inputs.lesion_arrays,
+        binary_lesion_arrays=inputs.binary_lesion_arrays,
+        penumbras_arrays=inputs.penumbras_arrays,
+        dilated_lesion_arrays=inputs.dilated_lesion_arrays,
+    )
+    wb_lesion_csv = metrics_dir / "whole_brain_lesion_metrics.csv"
+    print("✓ Whole Brain Lesion Microstructure Metrics CSV saved")
+    write_csv(wb_lesion_df, str(wb_lesion_csv))
 
     # ── Peak width of Whole skeleton of tracts ───────────────────────────────────────────
     # Always written (empty DataFrame when no skeleton) so Snakemake can require the file.

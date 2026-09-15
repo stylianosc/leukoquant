@@ -146,6 +146,56 @@ def _process_continuous_term(vals, t_val, power=1):
         return powered, t_powered
 
 
+def demographics_rows_for_subject(df, subject_id, id_col="subject"):
+    """Rows of a demographics table belonging to one pipeline subject ID.
+
+    The pipeline identifies a subject-session by its output-directory path, so
+    for multi-session cohorts the ID is composite -- "sub-OAS30005/ses-d1274"
+    (OASIS-3) or "sub-011EPAD23687/sub-011EPAD23687_ses-01" (EPAD) -- while a
+    single-session cohort like ADNI-3 uses a plain "subj-002-s-6404". The
+    harmonised clinical_data_nn.csv schema stores these split across `subject`,
+    `session` and `subject_session` columns, so matching a composite ID against
+    `subject` alone never succeeds.
+
+    That is exactly what blocked covariate-adjusted z-scores for OASIS-3 and
+    EPAD: their healthy-reference lists use composite IDs, the lookup compared
+    them against `subject`, every healthy subject appeared to be missing its
+    covariates, and the run aborted. ADNI-3 was unaffected only because its IDs
+    happen to be subject-only, which masked the bug.
+
+    Matching rule:
+      * no "/" in the ID -- match `subject` exactly (unchanged behaviour);
+      * otherwise split on the first "/" and require `subject` to equal the
+        head, and the tail to equal either `session` or `subject_session`.
+        OASIS-3 matches on `session`, EPAD on `subject_session`.
+
+    Returns the matching rows as a DataFrame (empty if there are none).
+    """
+    sid = str(subject_id).strip()
+    if id_col not in df.columns:
+        return df.iloc[0:0]
+
+    if "/" not in sid:
+        return df[df[id_col].astype(str) == sid]
+
+    head, tail = sid.split("/", 1)
+    candidates = df[df[id_col].astype(str) == head]
+    if candidates.empty:
+        return candidates
+
+    mask = None
+    for col in ("session", "subject_session"):
+        if col in candidates.columns:
+            hit = candidates[col].astype(str) == tail
+            mask = hit if mask is None else (mask | hit)
+    if mask is None:
+        # No session column to disambiguate on: the subject match is all the
+        # table can offer, so accept it rather than failing on a schema that
+        # simply does not carry sessions.
+        return candidates
+    return candidates[mask]
+
+
 def generate_design_matrix(
     demo_path: str,
     target_id: str,
@@ -220,38 +270,39 @@ def generate_design_matrix(
     with open(healthy_ids_path, "r") as fh:
         healthy_ids = [line.strip() for line in fh if line.strip()]
 
-    # Match healthy IDs with exact match first, then substring match (case-insensitive)
-    matched_healthy_ids = []
+    # Resolve each healthy ID to its demographics row(s). Composite
+    # "subject/session" IDs are matched on subject plus session (see
+    # demographics_rows_for_subject); a plain subject ID matches as before.
+    # The previous fallback here was a substring test that asked whether the
+    # demographics value contained the full ID, which is backwards for a
+    # composite ID and could never match one.
+    healthy_rows = []
     for hid in healthy_ids:
-        # Try exact match
-        exact_matches = df[df[id_col] == hid]
-        if not exact_matches.empty:
-            matched_healthy_ids.append(hid)
-        else:
-            # Try substring match
-            substring_matches = df[df[id_col].astype(str).str.contains(hid, case=False, na=False)]
-            if not substring_matches.empty:
-                # Use the first matched ID
-                matched_healthy_ids.append(substring_matches[id_col].iloc[0])
-            else:
-                raise ValueError(f"Healthy subject '{hid}' not found in demographics (tried exact and substring match)")
+        rows = demographics_rows_for_subject(df, hid, id_col)
+        if rows.empty:
+            raise ValueError(
+                f"Healthy subject '{hid}' not found in demographics. Composite "
+                f"IDs are matched on '{id_col}' plus 'session'/'subject_session'; "
+                f"check those columns exist and cover this subject.")
+        healthy_rows.append(rows.iloc[[0]])
 
-    healthy_df = df[df[id_col].isin(matched_healthy_ids)].copy()
-    healthy_df = healthy_df.set_index(id_col).reindex(matched_healthy_ids).reset_index()
+    healthy_df = pd.concat(healthy_rows, ignore_index=True)
 
     if len(healthy_df) != len(healthy_ids):
-        missing = set(healthy_ids) - set(healthy_df[id_col].tolist())
-        raise ValueError(f"Missing demographics for healthy subjects: {missing}")
+        raise ValueError(
+            f"Resolved {len(healthy_df)} demographics rows for "
+            f"{len(healthy_ids)} healthy subjects")
 
-    # Try exact match first, then substring match (case-insensitive)
-    target_row = df[df[id_col] == target_id]
-    if target_row.empty:
-        target_row = df[df[id_col].astype(str).str.contains(target_id, case=False, na=False)]
+    # Same composite-ID resolution as the healthy cohort above -- the target is
+    # identified by the same kind of path-style ID, so matching it on `subject`
+    # alone failed for every OASIS-3 and EPAD subject.
+    target_row = demographics_rows_for_subject(df, target_id, id_col)
     if target_row.empty:
         available_ids = df[id_col].tolist()[:10]  # Show first 10 for debugging
         raise ValueError(
-            f"Target subject '{target_id}' not found in {demo_path} (tried exact match and substring match). "
-            f"Available IDs (first 10): {available_ids}"
+            f"Target subject '{target_id}' not found in {demo_path}. Composite "
+            f"'subject/session' IDs are matched on '{id_col}' plus "
+            f"'session'/'subject_session'. Available IDs (first 10): {available_ids}"
         )
 
     if verbose:

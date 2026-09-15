@@ -15,7 +15,7 @@ import yaml
 
 from leukoquant.utils.subject_utils import read_subjects, resolve_subject_pattern
 from leukoquant.utils.bind_utils import dir_level_bind_files, consolidate_bind_entries
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 from leukoquant.utils.container_utils import (
     ensure_container,
     MINICONDA_SIF_FILENAME,
@@ -48,7 +48,7 @@ class GIFProcessor:
     def _validate_directories(self):
         if not self.gif_dir.exists():
             raise FileNotFoundError(f"Required directory not found: {self.gif_dir}")
-        for script in ["GIF_111125.sh"]:
+        for script in ["GIF_200826.sh"]:
             sp = self.gif_dir / script
             if not sp.exists():
                 raise FileNotFoundError(f"Required script not found: {sp}")
@@ -69,7 +69,8 @@ class GIFProcessor:
                 cores: int = 1,
                 keep_intermediate: bool = False,
                 force_rules: Optional[List[str]] = None,
-                verbose: bool = False) -> Tuple[str, str]:
+                verbose: bool = False,
+                use_gpu: bool = False) -> Tuple[str, str]:
         """Run GIF segmentation for one or more subjects.
 
         At least one of t1_pattern or flair_pattern must be provided.
@@ -200,6 +201,8 @@ class GIFProcessor:
             + [f"{str(scratch_host.absolute())}:{scratch_dir_singularity}"]
         )
         singularity_bind = "--bind " + ",".join(bind_parts)
+        if use_gpu:
+            singularity_bind += " --nv"
 
         workflow_dir = self.leukoquant_dir / "workflow" / "workflows"
         snakefile = workflow_dir / "gif_workflow.smk"
@@ -222,6 +225,7 @@ class GIFProcessor:
             "leukoquant_parent_dir": str(self.leukoquant_parent_dir.absolute()),
             # Database paths inside the container (t1_db always uses the default)
             "flair_db_singularity": flair_db_sing,
+            "use_gpu": use_gpu,
         }
 
         config_file = str(out_path.absolute()) + "/gif_config.yaml"
@@ -238,7 +242,6 @@ class GIFProcessor:
             "--directory", str(out_path),
             "--cores", str(cores),
             "--jobs", "unlimited",
-            "--immediate-submit", "--notemp",
             # Cold NFS mounts on some compute nodes exceed the default 5s.
             "--latency-wait", "60",
             "--software-deployment-method", "apptainer",
@@ -247,12 +250,21 @@ class GIFProcessor:
         ]
 
         if scheduler == "sge":
+            # --immediate-submit/--notemp only make sense (and only work)
+            # under an actual submission executor -- without --executor sge,
+            # Snakemake has no way to run the rules it's told to treat as
+            # already-submitted, and fails with "local rules cannot run when
+            # --immediate-submit is specified" (confirmed 2026-08-25: this
+            # was previously unconditional, breaking --scheduler local
+            # entirely). Matches zscore_processor.py's already-correct gating.
             snakemake_cmd.extend([
+                "--immediate-submit", "--notemp",
                 "--max-jobs-per-timespan", "75000/1s",
                 "--executor", "sge"
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
         env = os.environ.copy()
@@ -286,7 +298,8 @@ def apply_gif(subject_input: Optional[str] = None,
               keep_intermediate: bool = False,
               force_rules: Optional[List[str]] = None,
               verbose: bool = False,
-              config_yaml: Optional[str] = None) -> dict:
+              config_yaml: Optional[str] = None,
+              gpu: bool = False) -> dict:
     """Run GIF segmentation and return a summary dict.
 
     CLI / caller arguments take priority over values in ``config_yaml`` when
@@ -303,6 +316,7 @@ def apply_gif(subject_input: Optional[str] = None,
     cores_raw     = first_truthy(cores,         yaml_cfg.get("cores"))
     cores         = int(cores_raw) if cores_raw is not None else 1
     keep_intermediate = bool(yaml_cfg.get("keep_intermediate", False)) or bool(keep_intermediate)
+    gpu = bool(gpu or yaml_cfg.get("gpu", False))
 
     if not subject_input:
         raise ValueError("subject_input is required (via argument or config_yaml)")
@@ -327,6 +341,7 @@ def apply_gif(subject_input: Optional[str] = None,
             keep_intermediate=keep_intermediate,
             force_rules=force_rules,
             verbose=verbose,
+            use_gpu=gpu,
         )
         print("✅ GIF job submitted successfully")
         return {"success": True, "job_id": job_id, "results_dir": results_dir,

@@ -23,7 +23,7 @@ from leukoquant.utils.container_utils import (
     FREESURFER_SIF_HF_PATH,
 )
 from leukoquant.utils.external_utils import check_sge_plugin
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 
 logger = logging.getLogger(__name__)
 
@@ -338,7 +338,8 @@ class ZScoreProcessor:
                    cores: int = 1,
                    task_concurrency: Optional[int] = None,
                    force_rules: Optional[List[str]] = None,
-                   verbose: bool = False) -> Tuple[str, str]:
+                   verbose: bool = False,
+                   use_gpu: bool = False) -> Tuple[str, str]:
         """Run the z-score Snakemake workflow.
 
         Args:
@@ -485,6 +486,7 @@ class ZScoreProcessor:
             "leukoquant_parent_dir":      str(self.leukoquant_parent_dir.resolve()),
             "container_name":        "freesurfer_unified_container",
             "conda_env_name":        "z_scores_env",
+            "use_gpu":               use_gpu,
         }
         if dwi_pattern:
             config_dict["dwi_pattern"] = dwi_pattern
@@ -505,6 +507,8 @@ class ZScoreProcessor:
         # ------------------------------------------------------------------
         bind_str = ",".join(f"{host}:{container}" for host, container in bind_map.items())
         singularity_bind = f"--bind {bind_str}"
+        if use_gpu:
+            singularity_bind += " --nv"
 
         snakemake_cmd = [
             "snakemake",
@@ -529,6 +533,7 @@ class ZScoreProcessor:
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
         #logger.info(f"Singularity binds: {bind_str}")
@@ -577,6 +582,7 @@ def apply_zscore(
     force_rules: Optional[List[str]] = None,
     verbose: bool = False,
     config_yaml: Optional[str] = None,
+    gpu: bool = False,
 ) -> dict:
     """Run the Z-score workflow and return a summary dict.
 
@@ -683,6 +689,7 @@ def apply_zscore(
             task_concurrency=final_task_concurrency,
             force_rules=force_rules,
             verbose=verbose,
+            use_gpu=gpu,
         )
         print("✅ Z-score job submitted successfully")
         return {

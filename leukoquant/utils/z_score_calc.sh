@@ -62,6 +62,18 @@ QC=0
 SKIP_SKULLSTRIP_T1=0
 SKIP_SKULLSTRIP_DWI=0
 VERBOSE=0
+PLATF=0
+
+# CUDA-enabled NiftyReg build (downloaded on demand by ensure_niftyreg_gpu()
+# only when --gpu is requested; CPU-compatible by default via -platf 0).
+# See leukoquant/utils/container_utils.py's ensure_niftyreg_gpu().
+NIFTYREG_GPU_BIN="/leukoquant/leukoquant/external/niftyreg/gpu/bin"
+# Appended (not prepended): when apptainer's --nv injects a real driver
+# (typically at /.singularity.d/libs, ahead of anything we add here), it
+# must win the dynamic linker's search over our own bundled stub. Our
+# libcuda.so.1 stub is a fallback for nodes with no real driver at all,
+# not something that should ever shadow a real one.
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/leukoquant/leukoquant/external/niftyreg/gpu/lib"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -80,6 +92,7 @@ while [[ $# -gt 0 ]]; do
         --skip-skullstrip-t1)  SKIP_SKULLSTRIP_T1=1; shift ;;
         --skip-skullstrip-dwi) SKIP_SKULLSTRIP_DWI=1; shift ;;
         --verbose)         VERBOSE=1;            shift ;;
+        --platf)           PLATF="$2";            shift 2 ;;
         --dwi-paths)       shift; while [[ $# -gt 0 && "$1" != --* ]]; do DWI_PATHS+=("$1"); shift; done ;;
         --bval-paths)      shift; while [[ $# -gt 0 && "$1" != --* ]]; do BVAL_PATHS+=("$1"); shift; done ;;
         --healthy-t1s)     shift; while [[ $# -gt 0 && "$1" != --* ]]; do HEALTHY_T1S+=("$1"); shift; done ;;
@@ -177,6 +190,19 @@ mkdir -p "$SHARED_CACHE_DIR"
 # entire purpose is to persist and be reused by every other target's run.
 function finish {
     echo "Cleaning up scratch directory: $TMP_DIR"
+    # Report usage HERE, before deleting -- this is the trap that actually
+    # removes $TMP_DIR first (it fires before z_score_workflow.smk's own
+    # outer trap gets a chance to run), so any usage report added at the
+    # outer layer instead always measures an already-emptied directory and
+    # reads a meaningless ~0.00 GB (confirmed 2026-08-24: a real, successful
+    # EPAD run's log showed exactly this for both scratch_cleanup calls).
+    if [ -d "$TMP_DIR" ]; then
+        local tmp_dir_size_gb
+        tmp_dir_size_gb=$(du -sb "$TMP_DIR" 2>/dev/null | awk '{printf "%.2f", $1/1024/1024/1024}')
+        if [ -n "$tmp_dir_size_gb" ]; then
+            echo "Scratch usage before cleanup: ${tmp_dir_size_gb} GB"
+        fi
+    fi
     rm -rf "$TMP_DIR"
 }
 trap finish EXIT ERR INT TERM
@@ -235,6 +261,30 @@ extract_brain_dwi() {
 
     #bet "$input" "$output" -f 0.3
     mri_synthstrip -i "$input" -o "$output"
+}
+
+# Copies a healthy-cohort input from the shared SAN cache into this job's
+# own local /scratch0 the first time it's needed, so repeated NiftyReg
+# reads of the same file (e.g. a healthy subject's T1 is read by both
+# register_dwi_to_t1 and register_t1_to_target_t1) hit local disk instead
+# of the storage network on every call, and a single-use read becomes one
+# efficient sequential transfer instead of NiftyReg's own scattered I/O
+# pattern against a network mount. Idempotent within a job (a plain -f
+# check is enough -- this script is single-threaded, unlike the
+# cross-process races the SHARED_CACHE_DIR writes elsewhere guard against).
+# Echoes the local path; caller does `VAR=$(materialize_to_scratch ...)`.
+materialize_to_scratch() {
+    local san_path="$1"
+    local scratch_subdir="$2"
+
+    local dest_dir="$TMP_DIR/_san_cache/$scratch_subdir"
+    mkdir -p "$dest_dir"
+    local dest="$dest_dir/$(basename "$san_path")"
+
+    if [[ ! -f "$dest" ]]; then
+        cp "$san_path" "$dest"
+    fi
+    echo "$dest"
 }
 
 PREPARED_DWIS=()
@@ -370,9 +420,43 @@ prepare_dwi_inputs() {
         # discarding a successfully-prepared DWI (confirmed root cause of
         # EPAD's healthy-cohort DWI-prep never completing, 2026-08-14).
         mkdir -p "$(dirname "$DWI_FINAL_DIR")"
-        if [[ -d "$DWI_FINAL_DIR" ]] || ! mv "$DWI_TMP_DIR" "$DWI_FINAL_DIR" 2>/dev/null; then
-            echo "  [$IDX] Another job already cached this healthy subject's DWI -- discarding redundant copy."
-            rm -rf "$DWI_TMP_DIR"
+        # A pre-existing $DWI_FINAL_DIR is NOT proof another job already
+        # succeeded -- only the expected files (checked above) are. An
+        # empty/incomplete leftover directory (from any earlier interrupted
+        # attempt) previously made every subsequent job wrongly assume
+        # success and discard its own good copy forever, since a bare
+        # directory-existence check can never tell "empty leftover" apart
+        # from "genuinely populated" (confirmed 2026-08-24: this is exactly
+        # why EPAD's healthy-cohort DWI prep for some subjects never
+        # completed despite dozens of retry attempts). Checking the real
+        # files instead, same as the skip-check above, fixes that. `mv` a
+        # directory onto an EXISTING target directory also nests it inside
+        # rather than replacing it, so any stale remnant must be cleared
+        # first, not just detected.
+        # The check-then-clear-then-move sequence below is a TOCTOU race without a
+        # lock: two jobs can both see PREPARED_DWI/PREPARED_BVAL missing, both take
+        # the else branch, and whichever runs `rm -rf "$DWI_FINAL_DIR"` second can
+        # destroy the other job's just-published cache entry mid-flight (or race its
+        # in-progress `mv` on filesystems where directory moves aren't atomic). An
+        # flock-guarded critical section serialises all jobs targeting the same
+        # cache entry so the check and the destructive rm+mv happen as one unit.
+        (
+            flock -x 200
+            if [[ -f "$PREPARED_DWI" && -f "$PREPARED_BVAL" ]]; then
+                echo "  [$IDX] Another job already cached this healthy subject's DWI -- discarding redundant copy."
+                rm -rf "$DWI_TMP_DIR"
+            else
+                rm -rf "$DWI_FINAL_DIR"
+                if ! mv "$DWI_TMP_DIR" "$DWI_FINAL_DIR" 2>/dev/null; then
+                    echo "  [$IDX] Another job's cache write raced ours -- discarding redundant copy."
+                    rm -rf "$DWI_TMP_DIR"
+                fi
+            fi
+        ) 200>"${DWI_FINAL_DIR}.lock"
+
+        if [[ ! -f "$PREPARED_DWI" || ! -f "$PREPARED_BVAL" ]]; then
+            echo "ERROR: Prepared DWI/bvals not found after caching: $PREPARED_DWI" >&2
+            exit 1
         fi
 
         PREPARED_DWIS+=("$PREPARED_DWI")
@@ -467,12 +551,13 @@ prepare_target_dwi_transforms() {
         extract_brain_dwi "$TARGET_B0_FIRST" "$TARGET_B0_BRAIN"
     fi
 
-    reg_aladin \
+    "$NIFTYREG_GPU_BIN/reg_aladin" \
         -ref "$PREPARED_TARGET_T1" \
         -flo "$TARGET_B0_BRAIN" \
         -aff "$TARGET_DIFF2T1_AFFINE" \
         -res "$TARGET_B0_BRAIN_IN_T1" \
         -omp "$THREADS" \
+        -platf "$PLATF" \
         -voff > /dev/null 2>&1
 
     reg_transform -invAff "$TARGET_DIFF2T1_AFFINE" "$TARGET_T12DIFF_AFFINE" > /dev/null 2>&1
@@ -519,19 +604,21 @@ prepare_target_metrics_for_output_space() {
         fi
 
         if [[ "$METRIC_SPACE" == "dwi" && "$OUTPUT_SPACE" == "t1" ]]; then
-            reg_resample \
+            "$NIFTYREG_GPU_BIN/reg_resample" \
                 -ref "$PREPARED_TARGET_T1" \
                 -flo "$TARGET_METRIC_RAW" \
                 -trans "$TARGET_DIFF2T1_AFFINE" \
                 -res "$TARGET_METRIC_PREP" \
+                -platf "$PLATF" \
                 -inter 1 \
                 -voff > /dev/null 2>&1
         elif [[ "$METRIC_SPACE" == "t1" && "$OUTPUT_SPACE" == "dwi" ]]; then
-            reg_resample \
+            "$NIFTYREG_GPU_BIN/reg_resample" \
                 -ref "$TARGET_B0_BRAIN" \
                 -flo "$TARGET_METRIC_RAW" \
                 -trans "$TARGET_T12DIFF_AFFINE" \
                 -res "$TARGET_METRIC_PREP" \
+                -platf "$PLATF" \
                 -inter 1 \
                 -voff > /dev/null 2>&1
         else
@@ -707,14 +794,28 @@ register_dwi_to_t1() {
         IDX=$(printf "%04d" "$i")
 
         # Keyed by the real subject ID, not loop position -- same reasoning
-        # as prepare_dwi_inputs.
+        # as prepare_dwi_inputs. Filenames inside this directory must NOT
+        # also fold in $IDX: it's the healthy subject's loop position, not a
+        # stable identifier -- if the healthy-subjects list's order/content
+        # ever changes between two runs (this cohort was built up over
+        # weeks), the same healthy subject can get a different $i on a later
+        # run, and a cache entry written under the old index becomes
+        # permanently invisible to runs computing a new one. Confirmed
+        # 2026-08-22 via stage_census.py --detailed: a real "diff2t1 affine
+        # not found" failure where the cache held 0005_... but the failing
+        # run looked for 0001_... for the exact same healthy subject.
         HEALTY_DIFF2T1_FOLDER="$DIFF2T1_DIR/${HEALTHY_ID}"
-        HEALTHY_DIFF2T1_AFF="$HEALTY_DIFF2T1_FOLDER/${IDX}_diff2t1_affine.txt"
+        HEALTHY_DIFF2T1_AFF="$HEALTY_DIFF2T1_FOLDER/diff2t1_affine.txt"
 
         if [[ -f "$HEALTHY_DIFF2T1_AFF" ]]; then
             echo "  [$IDX] [SKIP] DWI b0 to T1 already registered: ${HEALTHY_ID} ($((i+1))/${N_HEALTHY})"
         else
             echo "  [$IDX] Processing DWI for: ${HEALTHY_ID} ($((i+1))/${N_HEALTHY}) ($((i+1))/${N_HEALTHY})"
+
+            # Materialize the healthy T1 to local scratch once per job --
+            # register_t1_to_target_t1 reuses this exact scratch copy below
+            # instead of re-reading from the SAN cache.
+            HEALTHY_T1=$(materialize_to_scratch "$HEALTHY_T1" "healthy_t1/${HEALTHY_ID}")
 
             # Every target subject's job processes the same healthy cohort
             # and can race on this exact cache entry. Prepare into a
@@ -724,10 +825,15 @@ register_dwi_to_t1() {
             HEALTY_DIFF2T1_FOLDER_TMP="$DIFF2T1_DIR/.tmp_${HEALTHY_ID}_$$_${RANDOM}"
             mkdir -p "$HEALTY_DIFF2T1_FOLDER_TMP"
 
+            # Purely within-run temp files (never looked up by name in a
+            # later, separate invocation) can keep the $IDX prefix safely --
+            # only HEALTHY_B0_BRAIN and HEALTHY_DIFF2T1_AFF_TMP below are
+            # part of the persistent cross-run cache contract and must use
+            # stable names (see the comment above HEALTY_DIFF2T1_FOLDER).
             HEALTHY_B0_4D="$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_b0_4d.nii.gz"
             HEALTHY_B0_FIRST="$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_b0_first.nii.gz"
-            HEALTHY_B0_BRAIN="$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_b0_brain.nii.gz"
-            HEALTHY_DIFF2T1_AFF_TMP="$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_diff2t1_affine.txt"
+            HEALTHY_B0_BRAIN="$HEALTY_DIFF2T1_FOLDER_TMP/b0_brain.nii.gz"
+            HEALTHY_DIFF2T1_AFF_TMP="$HEALTY_DIFF2T1_FOLDER_TMP/diff2t1_affine.txt"
             HEALTHY_B0_BRAIN_IN_T1="$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_b0_brain_in_t1_aladin.nii.gz"
 
             #echo "    Extracting b0 volumes ..."
@@ -745,12 +851,13 @@ register_dwi_to_t1() {
             fi
 
             #echo "    Registering b0 to T1 (affine) ..."
-            reg_aladin \
+            "$NIFTYREG_GPU_BIN/reg_aladin" \
                 -ref "$HEALTHY_T1"  \
                 -flo "$HEALTHY_B0_BRAIN"    \
                 -aff "$HEALTHY_DIFF2T1_AFF_TMP" \
                 -res "$HEALTHY_B0_BRAIN_IN_T1" \
                 -omp "$THREADS"     \
+                -platf "$PLATF"     \
                 -voff > /dev/null 2>&1
 
             if [[ ! -f "$HEALTHY_DIFF2T1_AFF_TMP" ]]; then
@@ -762,14 +869,15 @@ register_dwi_to_t1() {
             if [[ "$QC" -eq 1 ]]; then
                 # Store Healthy b0 brain / T1 in T1 space for QC, inside the
                 # same job-unique temp dir so they move atomically together.
-                reg_resample \
+                "$NIFTYREG_GPU_BIN/reg_resample" \
                     -ref "$HEALTHY_T1"  \
                     -flo "$HEALTHY_B0_BRAIN" \
                     -trans "$HEALTHY_DIFF2T1_AFF_TMP" \
-                    -res "$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_b0_brain_in_t1.nii.gz" \
+                    -res "$HEALTY_DIFF2T1_FOLDER_TMP/b0_brain_in_t1.nii.gz" \
+                    -platf "$PLATF" \
                     -inter 1 \
                     -voff > /dev/null 2>&1
-                cp "$HEALTHY_T1" "$HEALTY_DIFF2T1_FOLDER_TMP/${IDX}_t1.nii.gz"
+                cp "$HEALTHY_T1" "$HEALTY_DIFF2T1_FOLDER_TMP/t1.nii.gz"
             fi
 
             # Same nested-HEALTHY_ID issue as prepare_dwi_inputs/prepare_t1_inputs
@@ -779,9 +887,24 @@ register_dwi_to_t1() {
             # with "diff2t1 affine not found" right after the T1 fix let it
             # progress past skull-stripping.
             mkdir -p "$(dirname "$HEALTY_DIFF2T1_FOLDER")"
-            if [[ -d "$HEALTY_DIFF2T1_FOLDER" ]] || ! mv "$HEALTY_DIFF2T1_FOLDER_TMP" "$HEALTY_DIFF2T1_FOLDER" 2>/dev/null; then
+            # Same "existing directory isn't proof of success" issue as
+            # prepare_dwi_inputs (see its comment) -- only the expected
+            # affine file is real proof. An empty/incomplete leftover
+            # folder here previously made every subsequent job wrongly
+            # assume success and discard its own good copy forever
+            # (confirmed 2026-08-24: EPAD sub-011EPAD23687's diff2t1 folder
+            # existed but was empty, blocking every target subject that
+            # needed it). `mv` onto an EXISTING target directory nests
+            # rather than replaces, so clear any stale remnant first.
+            if [[ -f "$HEALTHY_DIFF2T1_AFF" ]]; then
                 echo "  [$IDX] Another job already cached this healthy subject's b0->T1 registration -- discarding redundant copy."
                 rm -rf "$HEALTY_DIFF2T1_FOLDER_TMP"
+            else
+                rm -rf "$HEALTY_DIFF2T1_FOLDER"
+                if ! mv "$HEALTY_DIFF2T1_FOLDER_TMP" "$HEALTY_DIFF2T1_FOLDER" 2>/dev/null; then
+                    echo "  [$IDX] Another job's cache write raced ours -- discarding redundant copy."
+                    rm -rf "$HEALTY_DIFF2T1_FOLDER_TMP"
+                fi
             fi
 
             if [[ ! -f "$HEALTHY_DIFF2T1_AFF" ]]; then
@@ -828,9 +951,11 @@ qc_register_nodiff_to_t1_folder() {
 
         # register_dwi_to_t1 now writes this into the shared cache, keyed by
         # real subject ID (see that function's comment for why this step is
-        # target-independent).
+        # target-independent). Stable filename, no $IDX -- must match the
+        # writer exactly (see register_dwi_to_t1's comment on why $IDX
+        # can't be part of a cross-run cache filename).
         HEALTY_DIFF2T1_FOLDER="$SHARED_CACHE_DIR/diff2t1/${HEALTHY_ID}"
-        HEALTHY_B0_BRAIN="$HEALTY_DIFF2T1_FOLDER/${IDX}_b0_brain.nii.gz"
+        HEALTHY_B0_BRAIN="$HEALTY_DIFF2T1_FOLDER/b0_brain.nii.gz"
 
         NODIFF_QC_SUBJECT_DIR="$NODIFF_QC_DIR/${IDX}"
         mkdir -p "$NODIFF_QC_SUBJECT_DIR"
@@ -853,17 +978,23 @@ qc_register_nodiff_to_t1_folder() {
             exit 1
         fi
 
+        # HEALTHY_T1 is likely already cached locally from register_t1_to_target_t1
+        # (this loop runs after it); HEALTHY_B0_BRAIN is fresh here.
+        HEALTHY_T1=$(materialize_to_scratch "$HEALTHY_T1" "healthy_t1/${HEALTHY_ID}")
+        HEALTHY_B0_BRAIN=$(materialize_to_scratch "$HEALTHY_B0_BRAIN" "healthy_b0_brain/${HEALTHY_ID}")
+
         #echo "  [$IDX] Composing nodiff->target transform for QC ($((i+1))/${N_HEALTHY})"
         reg_transform_cmd="reg_transform -comp \"${HEALTHY_DIFF2T1_AFFINES[$i]}\" \"${HEALTHY_T1_TO_TARGET_T1_CPPS[$i]}\" \"$COMPOSED\" -ref \"$HEALTHY_T1\""
         #echo "    Running reg_transform with command: $reg_transform_cmd"
         eval "$reg_transform_cmd" > /dev/null 2>&1
 
         #echo "  [$IDX] Resampling nodiff brain to target T1 for QC ($((i+1))/${N_HEALTHY})"
-        reg_resample \
+        "$NIFTYREG_GPU_BIN/reg_resample" \
             -ref "$PREPARED_TARGET_T1" \
             -flo "$HEALTHY_B0_BRAIN" \
             -trans "$COMPOSED" \
             -res "$NODIFF_IN_TARGET_T1" \
+            -platf "$PLATF" \
             -inter 1 \
             -voff > /dev/null 2>&1
 
@@ -916,23 +1047,31 @@ register_t1_to_target_t1() {
 
         echo "  [${IDX}] Registering healthy subject: ${HEALTHY_ID} ($((i+1))/${N_HEALTHY}) ..."
 
+        # Reuses the scratch copy register_dwi_to_t1 already made for this
+        # healthy subject (if metric-space=dwi ran first), or materializes
+        # it fresh here -- either way, both reg_aladin and reg_f3d below
+        # read the same local copy instead of hitting the SAN cache twice.
+        HEALTHY_T1=$(materialize_to_scratch "$HEALTHY_T1" "healthy_t1/${HEALTHY_ID}")
+
         #echo "    Step $(get_step).$((sub_step))a: Running reg_aladin (affine) ..."
-        reg_aladin \
+        "$NIFTYREG_GPU_BIN/reg_aladin" \
             -ref "$PREPARED_TARGET_T1"  \
             -flo "$HEALTHY_T1" \
             -aff "$HEALTHY_T1_TO_TARGET_T1_AFFINE"     \
             -res "$RES_T1_ALADIN" \
             -omp "$THREADS"    \
+            -platf "$PLATF"    \
             -voff > /dev/null 2>&1
 
         #echo "    Step $(get_step).$((sub_step))b: Running reg_f3d (non-linear CPP) ..."
-        reg_f3d \
+        "$NIFTYREG_GPU_BIN/reg_f3d" \
             -ref "$PREPARED_TARGET_T1"  \
             -flo "$HEALTHY_T1" \
             -aff "$HEALTHY_T1_TO_TARGET_T1_AFFINE"     \
             -cpp "$CPP"        \
             -res "$RES_T1"     \
             -omp "$THREADS"    \
+            -platf "$PLATF"    \
             -voff > /dev/null 2>&1
 
         if [[ ! -f "$CPP" ]]; then
@@ -968,175 +1107,31 @@ register_t1_to_target_t1() {
     sync
 }
 
-register_metrics() {
-    sub_step=$((sub_step + 1))
-    echo "Step $(get_step).$sub_step: Registering healthy metrics to target space ..."
+process_metrics_step() {
+    increment_step
+    echo "Step $(get_step): Registering, merging, and computing Z-scores per metric"
 
     local METRIC_NAME
     local METRIC_TMP
     local OFFSET
     local HEALTHY_METRIC
     local HEALTHY_T1
+    local HEALTHY_ID
     local IDX
     local REG_METRIC
+    local REG_METRIC_FOLDER
     local COMPOSED
+    local COMPOSED_FOLDER
     local reg_transform_cmd
     local reg_resample_cmd
-    
-    for (( m=0; m<N_METRICS; m++ )); do
-        METRIC_NAME="${METRIC_NAMES[$m]}"
-        METRIC_TMP="$TMP_DIR/$METRIC_NAME"
-        mkdir -p "$METRIC_TMP"
-
-        echo "--- Metric: $METRIC_NAME ---"
-
-        OFFSET=$(( m * N_HEALTHY ))
-
-        for (( i=0; i<N_HEALTHY; i++ )); do
-            HEALTHY_METRIC="${HEALTHY_METRICS_ALL[$(( OFFSET + i ))]}"
-            HEALTHY_T1="${PREPARED_HEALTHY_T1S[$i]}"
-            IDX=$(printf "%04d" "$i")
-
-            REG_METRIC_FOLDER="$METRIC_TMP/${IDX}"
-            mkdir -p "$REG_METRIC_FOLDER"
-            REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target.nii.gz"
-
-            if [[ -f "$REG_METRIC" ]]; then
-                echo "    [SKIP] Metric already registered for ${IDX}"
-                continue
-            fi
-
-            if [[ "$METRIC_SPACE" == "dwi" ]]; then
-                # Registration: healthy metric in DWI space -> target T1 space
-                COMPOSED_FOLDER="$METRIC_TMP/${IDX}"
-                mkdir -p "$COMPOSED_FOLDER"
-                COMPOSED="$COMPOSED_FOLDER/${IDX}_composed.nii.gz"
-
-                echo "    Composing transforms for ${IDX}: HEALTHY DWI -> HEALTHY T1 -> TARGET T1"
-
-                reg_transform_cmd="reg_transform -comp \"${HEALTHY_DIFF2T1_AFFINES[$i]}\" \"${HEALTHY_T1_TO_TARGET_T1_CPPS[$i]}\" \"$COMPOSED\" -ref \"$HEALTHY_T1\""
-                #echo "    Running reg_transform with command: $reg_transform_cmd"
-                eval "$reg_transform_cmd" > /dev/null 2>&1
-
-                reg_resample_cmd="reg_resample -ref \"$PREPARED_TARGET_T1\" -flo \"$HEALTHY_METRIC\" -trans \"$COMPOSED\" -res \"$REG_METRIC\" -inter 1 -voff"
-                #echo "    Running reg_resample with command: $reg_resample_cmd"
-                eval "$reg_resample_cmd" > /dev/null 2>&1
-            else
-                # Registration: healthy metric in T1 space -> target T1 space
-                echo "    Registering healthy metric to target T1 space for ${IDX}: HEALTHY T1 -> TARGET T1"
-                reg_resample_cmd="reg_resample -ref \"$PREPARED_TARGET_T1\" -flo \"$HEALTHY_METRIC\" -trans \"${HEALTHY_T1_TO_TARGET_T1_CPPS[$i]}\" -res \"$REG_METRIC\" -inter 1 -voff"
-                #echo "    Running reg_resample with command: $reg_resample_cmd"
-                eval "$reg_resample_cmd" > /dev/null 2>&1
-            fi
-        done
-    done
-
-    echo "  All metrics registered to target space."
-    sync
-}
-
-project_registered_metrics_to_output_space() {
-    if [[ "$OUTPUT_SPACE" != "dwi" ]]; then
-        return 0
-    fi
-
-    sub_step=$((sub_step + 1))
-    echo "Step $(get_step).$sub_step: Projecting registered healthy metrics to target DWI space ..."
-
-    local METRIC_NAME
-    local METRIC_TMP
-    local IDX
     local REG_METRIC_T1
     local REG_METRIC_DWI
-
-    for (( m=0; m<N_METRICS; m++ )); do
-        METRIC_NAME="${METRIC_NAMES[$m]}"
-        METRIC_TMP="$TMP_DIR/$METRIC_NAME"
-
-        for (( i=0; i<N_HEALTHY; i++ )); do
-            IDX=$(printf "%04d" "$i")
-            REG_METRIC_T1="$METRIC_TMP/${IDX}/${IDX}_in_target.nii.gz"
-            REG_METRIC_DWI="$METRIC_TMP/${IDX}/${IDX}_in_target_dwi.nii.gz"
-
-            if [[ -f "$REG_METRIC_DWI" ]]; then
-                echo "    [SKIP] Metric already projected to DWI for ${IDX}"
-                continue
-            fi
-
-            reg_resample \
-                -ref "$TARGET_B0_BRAIN" \
-                -flo "$REG_METRIC_T1" \
-                -trans "$TARGET_T12DIFF_AFFINE" \
-                -res "$REG_METRIC_DWI" \
-                -inter 1 \
-                -voff > /dev/null 2>&1
-
-            if [[ ! -f "$REG_METRIC_DWI" ]]; then
-                echo "Error: projection to target DWI failed for metric $METRIC_NAME subject $IDX" >&2
-                exit 1
-            fi
-        done
-    done
-}
-
-merge_metrics() {
-    sub_step=$((sub_step + 1))
-    echo "Step $(get_step).$sub_step: Merging registered healthy metrics ..."
-
-    local METRIC_NAME
-    local METRIC_TMP
-    local OFFSET
-    local IDX
-    local REGISTERED_METRICS
+    local MERGED_FOLDER
     local MERGED
-
-    for (( m=0; m<N_METRICS; m++ )); do
-        METRIC_NAME="${METRIC_NAMES[$m]}"
-        METRIC_TMP="$TMP_DIR/$METRIC_NAME"
-
-        echo ""
-        echo "--- Metric: $METRIC_NAME ---"
-
-        REGISTERED_METRICS=()
-        for (( i=0; i<N_HEALTHY; i++ )); do
-            IDX=$(printf "%04d" "$i")
-            REG_METRIC_FOLDER="$METRIC_TMP/${IDX}"
-            if [[ "$OUTPUT_SPACE" == "dwi" ]]; then
-                REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target_dwi.nii.gz"
-            else
-                REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target.nii.gz"
-            fi
-            REGISTERED_METRICS+=("$REG_METRIC")
-        done
-
-        MERGED_FOLDER="$METRIC_TMP/merged"
-        mkdir -p "$MERGED_FOLDER"
-
-        MERGED="$MERGED_FOLDER/healthy_merged_${METRIC_NAME}.nii.gz"
-        
-        if [[ -f "$MERGED" ]]; then
-            echo "  [SKIP] Merged file already exists: $MERGED"
-        else
-            echo "  Merging ${N_HEALTHY} registered metrics ..."
-            fslmerge -t "$MERGED" "${REGISTERED_METRICS[@]}"
-
-            if [[ ! -f "$MERGED" ]]; then
-                echo "ERROR: Merged file missing: $MERGED" >&2
-                exit 1
-            fi
-        fi
-    done
-}
-
-compute_z_scores() {
-    increment_step
-    echo "Step $(get_step): Computing GLM and Z-scores ..."
-
-    local METRIC_NAME
+    local REGISTERED_METRICS
     local TARGET_METRIC
     local OUTPUT_FILE
-    local METRIC_TMP
-    local MERGED
+    local GLM_FOLDER
     local BETAS
     local RESIDUALS
     local STD_DEV
@@ -1169,7 +1164,11 @@ compute_z_scores() {
 
     for (( m=0; m<N_METRICS; m++ )); do
         METRIC_NAME="${METRIC_NAMES[$m]}"
-        TARGET_METRIC="${PREPARED_TARGET_METRICS[$m]}"
+        METRIC_TMP="$TMP_DIR/$METRIC_NAME"
+        mkdir -p "$METRIC_TMP"
+
+        echo ""
+        echo "--- Metric: $METRIC_NAME ---"
 
         # Build filename suffix with covariates and poly terms
         FILENAME_SUFFIX=""
@@ -1189,28 +1188,147 @@ compute_z_scores() {
         # z_score_outputs() (process_all_workflow.smk), silently breaking
         # the z-score -> metrics dependency chain those rely on.
         OUTPUT_FILE="$OUTPUT_DIR/${METRIC_NAME}_z_score${FILENAME_SUFFIX}.nii.gz"
-        METRIC_TMP="$TMP_DIR/$METRIC_NAME"
-        MERGED_FOLDER="$METRIC_TMP/merged"
-        GLM_FOLDER="$METRIC_TMP/GLM"
-        
-        mkdir -p "$MERGED_FOLDER" "$GLM_FOLDER"
 
-        MERGED="$MERGED_FOLDER/healthy_merged_${METRIC_NAME}.nii.gz"
-
-        if [[ ! -f "$MERGED" ]]; then
-            echo "ERROR: merged healthy metric missing before GLM: $MERGED" >&2
-            exit 1
-        fi
-
-        #echo ""
-        echo "--- Metric: $METRIC_NAME ---"
-        
-        # Skip check: if final output exists, skip entire metric
+        # Whole-metric skip: on a resumed run, if the final z-score output
+        # already exists there is nothing left to do for this metric --
+        # registering and merging it again (the old separate-phases
+        # structure always did this, for every metric, even ones already
+        # fully done, since registration didn't know the final output
+        # already existed) would waste real compute and scratch for
+        # nothing.
         if [[ -f "$OUTPUT_FILE" ]]; then
             echo "  [SKIP] Z-score already computed: $OUTPUT_FILE"
             continue
         fi
-        
+
+        # --- Register this metric's healthy cohort into target space ---
+        echo "  Registering healthy metric to target space ..."
+        OFFSET=$(( m * N_HEALTHY ))
+        for (( i=0; i<N_HEALTHY; i++ )); do
+            HEALTHY_METRIC="${HEALTHY_METRICS_ALL[$(( OFFSET + i ))]}"
+            HEALTHY_T1="${PREPARED_HEALTHY_T1S[$i]}"
+            HEALTHY_ID=$(sed -n "$((i+1))p" "$HEALTHY_IDS_FILE")
+            IDX=$(printf "%04d" "$i")
+
+            REG_METRIC_FOLDER="$METRIC_TMP/${IDX}"
+            mkdir -p "$REG_METRIC_FOLDER"
+            REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target.nii.gz"
+
+            if [[ -f "$REG_METRIC" ]]; then
+                echo "    [SKIP] Metric already registered for ${IDX}"
+                continue
+            fi
+
+            # HEALTHY_T1 is likely already cached locally from
+            # register_t1_to_target_t1; HEALTHY_METRIC is fresh here, keyed
+            # by metric name too since different metrics' files can share a
+            # basename across healthy subjects.
+            HEALTHY_T1=$(materialize_to_scratch "$HEALTHY_T1" "healthy_t1/${HEALTHY_ID}")
+            HEALTHY_METRIC=$(materialize_to_scratch "$HEALTHY_METRIC" "metrics/${METRIC_NAME}/${HEALTHY_ID}")
+
+            if [[ "$METRIC_SPACE" == "dwi" ]]; then
+                # Registration: healthy metric in DWI space -> target T1 space
+                COMPOSED_FOLDER="$METRIC_TMP/${IDX}"
+                mkdir -p "$COMPOSED_FOLDER"
+                COMPOSED="$COMPOSED_FOLDER/${IDX}_composed.nii.gz"
+
+                echo "    Composing transforms for ${IDX}: HEALTHY DWI -> HEALTHY T1 -> TARGET T1"
+
+                reg_transform_cmd="reg_transform -comp \"${HEALTHY_DIFF2T1_AFFINES[$i]}\" \"${HEALTHY_T1_TO_TARGET_T1_CPPS[$i]}\" \"$COMPOSED\" -ref \"$HEALTHY_T1\""
+                #echo "    Running reg_transform with command: $reg_transform_cmd"
+                eval "$reg_transform_cmd" > /dev/null 2>&1
+
+                reg_resample_cmd="\"$NIFTYREG_GPU_BIN/reg_resample\" -ref \"$PREPARED_TARGET_T1\" -flo \"$HEALTHY_METRIC\" -trans \"$COMPOSED\" -res \"$REG_METRIC\" -platf \"$PLATF\" -inter 1 -voff"
+                #echo "    Running reg_resample with command: $reg_resample_cmd"
+                eval "$reg_resample_cmd" > /dev/null 2>&1
+            else
+                # Registration: healthy metric in T1 space -> target T1 space
+                echo "    Registering healthy metric to target T1 space for ${IDX}: HEALTHY T1 -> TARGET T1"
+                reg_resample_cmd="\"$NIFTYREG_GPU_BIN/reg_resample\" -ref \"$PREPARED_TARGET_T1\" -flo \"$HEALTHY_METRIC\" -trans \"${HEALTHY_T1_TO_TARGET_T1_CPPS[$i]}\" -res \"$REG_METRIC\" -platf \"$PLATF\" -inter 1 -voff"
+                #echo "    Running reg_resample with command: $reg_resample_cmd"
+                eval "$reg_resample_cmd" > /dev/null 2>&1
+            fi
+        done
+        sync
+
+        # --- Project to target DWI space, only when the final analysis
+        # space is DWI (distinct from METRIC_SPACE above, which is about
+        # the SOURCE space of the healthy metric being registered) ---
+        if [[ "$OUTPUT_SPACE" == "dwi" ]]; then
+            echo "  Projecting registered healthy metric to target DWI space ..."
+            for (( i=0; i<N_HEALTHY; i++ )); do
+                IDX=$(printf "%04d" "$i")
+                REG_METRIC_T1="$METRIC_TMP/${IDX}/${IDX}_in_target.nii.gz"
+                REG_METRIC_DWI="$METRIC_TMP/${IDX}/${IDX}_in_target_dwi.nii.gz"
+
+                if [[ -f "$REG_METRIC_DWI" ]]; then
+                    echo "    [SKIP] Metric already projected to DWI for ${IDX}"
+                    continue
+                fi
+
+                "$NIFTYREG_GPU_BIN/reg_resample" \
+                    -ref "$TARGET_B0_BRAIN" \
+                    -flo "$REG_METRIC_T1" \
+                    -trans "$TARGET_T12DIFF_AFFINE" \
+                    -res "$REG_METRIC_DWI" \
+                    -platf "$PLATF" \
+                    -inter 1 \
+                    -voff > /dev/null 2>&1
+
+                if [[ ! -f "$REG_METRIC_DWI" ]]; then
+                    echo "Error: projection to target DWI failed for metric $METRIC_NAME subject $IDX" >&2
+                    exit 1
+                fi
+            done
+        fi
+
+        # --- Merge this metric's registered files into one 4D stack ---
+        REGISTERED_METRICS=()
+        for (( i=0; i<N_HEALTHY; i++ )); do
+            IDX=$(printf "%04d" "$i")
+            REG_METRIC_FOLDER="$METRIC_TMP/${IDX}"
+            if [[ "$OUTPUT_SPACE" == "dwi" ]]; then
+                REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target_dwi.nii.gz"
+            else
+                REG_METRIC="$REG_METRIC_FOLDER/${IDX}_in_target.nii.gz"
+            fi
+            REGISTERED_METRICS+=("$REG_METRIC")
+        done
+
+        MERGED_FOLDER="$METRIC_TMP/merged"
+        mkdir -p "$MERGED_FOLDER"
+
+        MERGED="$MERGED_FOLDER/healthy_merged_${METRIC_NAME}.nii.gz"
+
+        if [[ -f "$MERGED" ]]; then
+            echo "  [SKIP] Merged file already exists: $MERGED"
+        else
+            echo "  Merging ${N_HEALTHY} registered metrics ..."
+            fslmerge -t "$MERGED" "${REGISTERED_METRICS[@]}"
+
+            if [[ ! -f "$MERGED" ]]; then
+                echo "ERROR: Merged file missing: $MERGED" >&2
+                exit 1
+            fi
+        fi
+
+        # The per-healthy individual registered files are only needed to
+        # build $MERGED above -- nothing downstream reads them again (the
+        # GLM step reads $MERGED). Without this, all N_HEALTHY individual
+        # files for this metric would sit in scratch for the rest of this
+        # metric's GLM step for no reason. Safe on a resumed/[SKIP] run
+        # too: $MERGED already existing means these were already cleaned
+        # (or never written), and rm -rf on an absent path is a no-op.
+        for (( i=0; i<N_HEALTHY; i++ )); do
+            IDX=$(printf "%04d" "$i")
+            rm -rf "$METRIC_TMP/${IDX}"
+        done
+
+        # --- GLM + Z-score for this metric ---
+        TARGET_METRIC="${PREPARED_TARGET_METRICS[$m]}"
+        GLM_FOLDER="$METRIC_TMP/GLM"
+        mkdir -p "$GLM_FOLDER"
+
         if [[ ! -f "$TARGET_METRIC" ]]; then
             echo "  ERROR: Target metric file does not exist: $TARGET_METRIC" >&2
             exit 1
@@ -1333,9 +1451,39 @@ compute_z_scores() {
 
         echo "  Applying brain mask to Z-score ..."
         # Reuses the single mask computed once at the top of this function.
-        fslmaths "$Z_SCORE_UNMASKED" -mas "$BRAIN_MASK" "$OUTPUT_FILE"
+        # Written to a temp path first, then atomically renamed into place --
+        # if fslmaths gets killed mid-write (walltime, OOM, node failure),
+        # $OUTPUT_FILE either still holds the last fully-valid result or
+        # never existed, never a truncated/corrupt file. Without this, a
+        # partial write would still pass the existence-only skip check above
+        # on a future resume, silently propagating a corrupt file forever.
+        #
+        # The temp name MUST still end in a real FSL-recognized extension
+        # (.nii.gz) -- fslmaths does not treat its output argument as a
+        # literal path, it strips/re-appends an extension based on
+        # $FSLOUTPUTTYPE. "${OUTPUT_FILE}.tmp" (appending .tmp AFTER
+        # .nii.gz) is not a recognized extension, so fslmaths silently wrote
+        # to a different actual filename than the one given (observed
+        # 2026-08-29: fslmaths exited 0, wrote real voxel data, but not to
+        # the intended temp path, so the follow-up mv found nothing and
+        # every z-score output for that run came up empty). Splicing "_tmp"
+        # in BEFORE .nii.gz keeps the extension intact and avoids this.
+        OUTPUT_FILE_TMP="${OUTPUT_FILE%.nii.gz}_tmp.nii.gz"
+        fslmaths "$Z_SCORE_UNMASKED" -mas "$BRAIN_MASK" "$OUTPUT_FILE_TMP"
+        mv "$OUTPUT_FILE_TMP" "$OUTPUT_FILE"
 
         echo "  Output saved at: $OUTPUT_FILE"
+
+        # This metric is fully done -- $MERGED, GLM intermediates, and
+        # everything else under $METRIC_TMP are now redundant with
+        # $OUTPUT_FILE (already safely written to the SAN above). Freeing
+        # the whole per-metric directory here means at most ONE metric's
+        # registration+merge+GLM data is ever in scratch at once, instead
+        # of all $N_METRICS accumulating for the rest of the job the way
+        # the old register-all -> merge-all -> zscore-all phase ordering
+        # did -- confirmed 2026-08-24 as a real contributor to "No space
+        # left on device" failures.
+        rm -rf "$METRIC_TMP"
     done
 
     if [[ ${#GLM_PEAK_MEM_REPORT[@]} -gt 0 ]]; then
@@ -1350,6 +1498,13 @@ compute_z_scores() {
     echo "=== All metrics complete for $TARGET_ID ==="
 }
 
+# [leukoquant patch] Restored 2026-08-27 -- deleted by f66ead8b (2026-08-24,
+# "Interleave registration/merge/z-score per metric instead of all-metrics
+# phases") along with the metrics-only build_metric_stacks_step it was
+# consolidating, but these two wrappers are unrelated to that refactor and
+# their call sites below were never removed -- every z-score job has been
+# failing immediately since with "prepare_target_space_step: command not
+# found" (confirmed via a live subj-003-s-6014 ADNI3 job's error log).
 function prepare_target_space_step {
     increment_step
     echo "Step $(get_step): Preparing target/structural spaces"
@@ -1376,19 +1531,6 @@ function register_healthy_to_target_step {
     qc_register_nodiff_to_t1_folder
 }
 
-function build_metric_stacks_step {
-    increment_step
-    echo "Step $(get_step): Building metric stacks in output space"
-
-    local sub_step=0
-    # Healthy metrics -> target T1 (common intermediate analysis space)
-    register_metrics
-    # Target T1 metrics -> target DWI (only when output-space=dwi)
-    project_registered_metrics_to_output_space
-    # Per-subject metrics -> 4D merged stack for GLM
-    merge_metrics
-}
-
 # ===========================================================================
 # Pipeline Execution Plan
 # Reorder function calls below if you want to change pipeline flow.
@@ -1406,10 +1548,12 @@ prepare_target_space_step
 # Step 4: Register healthy subjects to target
 register_healthy_to_target_step
 
-# Step 5: Build metric stacks in final output space
-build_metric_stacks_step
-
-# Step 6: GLM + predicted map + Z-score computation
-compute_z_scores
+# Step 5: Register, merge, and compute Z-scores, one metric at a time --
+# previously two separate all-metrics phases (register+merge everything,
+# then GLM+z-score everything), which meant every metric's registration
+# and merge output sat in scratch simultaneously for the whole GLM step.
+# Interleaved per-metric instead: each metric's scratch footprint is freed
+# once its z-score output is written, before starting the next metric.
+process_metrics_step
 
 

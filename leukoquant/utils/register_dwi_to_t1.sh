@@ -46,6 +46,18 @@ VERBOSE=false
 FORCE=false
 DWI_WORK=""
 BVAL_WORK=""
+PLATF=0
+
+# CUDA-enabled NiftyReg build (downloaded on demand by ensure_niftyreg_gpu()
+# only when --gpu is requested; CPU-compatible by default via -platf 0).
+# See leukoquant/utils/container_utils.py's ensure_niftyreg_gpu().
+NIFTYREG_GPU_BIN="/leukoquant/leukoquant/external/niftyreg/gpu/bin"
+# Appended (not prepended): when apptainer's --nv injects a real driver
+# (typically at /.singularity.d/libs, ahead of anything we add here), it
+# must win the dynamic linker's search over our own bundled stub. Our
+# libcuda.so.1 stub is a fallback for nodes with no real driver at all,
+# not something that should ever shadow a real one.
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/leukoquant/leukoquant/external/niftyreg/gpu/lib"
 
 # ============================================================================
 # Argument parsing
@@ -62,6 +74,7 @@ while [[ $# -gt 0 ]]; do
         --skip-skullstrip-dwi)   SKIP_SKULLSTRIP_DWI="$2"; shift 2 ;;
         --verbose)               VERBOSE="$2";              shift 2 ;;
         --force)                 FORCE="$2";                shift 2 ;;
+        --platf)                 PLATF="$2";                shift 2 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
 done
@@ -307,12 +320,13 @@ fi
 # ============================================================================
 log "  [5/6] Registering b0 to T1 (affine, threads=$THREADS) ..."
 
-reg_aladin \
+"$NIFTYREG_GPU_BIN/reg_aladin" \
     -ref "$T1_BRAIN"    \
     -flo "$B0_BRAIN"    \
     -aff "$DIFF2T1_AFF" \
     -res "$B0_BRAIN_IN_T1" \
     -omp "$THREADS"     \
+    -platf "$PLATF"     \
     -voff > /dev/null 2>&1
 
 if [[ ! -f "$DIFF2T1_AFF" ]]; then

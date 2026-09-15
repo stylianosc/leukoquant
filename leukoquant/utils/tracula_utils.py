@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 from typing import Dict, List, Optional, Tuple, Union
@@ -22,6 +23,11 @@ import glob
 
 import nibabel as nib
 import numpy as np
+
+# Allow imports of leukoquant when run from containers where the module is
+# bind-mounted at /leukoquant but not installed in site-packages.
+if "/leukoquant" not in sys.path and os.path.isdir("/leukoquant"):
+    sys.path.insert(0, "/leukoquant")
 
 from leukoquant.utils.dwi_utils import normalize_bvec_bval_to_tracula
 

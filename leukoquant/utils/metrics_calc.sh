@@ -31,7 +31,31 @@ AUTO_FA_SKELETON_PATH=""
 AUTO_FA_SKELETON_SPACE=""
 SCRATCH_DIR=""
 QC_REPORT=""
+PLATF=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/bash_utils.sh"
+
+# Tracks the combined RSS of this script's entire process tree for the
+# whole run, so real subjects give real numbers instead of guessing at a
+# resource request. Added 2026-08-30 after two subjects (DPUK
+# NEW002_PETMR_V2, ADNI3 subj-007-s-6120) crashed inside the
+# reg_aladin/reg_f3d/reg_transform/reg_resample registration block with no
+# diagnostic output at all -- consistent with, but not proven to be,
+# memory exhaustion. stop_peak_mem_monitor is called from cleanup() below
+# (not its own EXIT trap) so it reports even on an error/signal exit
+# without clobbering the trap cleanup() is already registered under.
+start_peak_mem_monitor
+
+# CUDA-enabled NiftyReg build (downloaded on demand by ensure_niftyreg_gpu()
+# only when --gpu is requested; CPU-compatible by default via -platf 0).
+# See leukoquant/utils/container_utils.py's ensure_niftyreg_gpu().
+NIFTYREG_GPU_BIN="/leukoquant/leukoquant/external/niftyreg/gpu/bin"
+# Appended (not prepended): when apptainer's --nv injects a real driver
+# (typically at /.singularity.d/libs, ahead of anything we add here), it
+# must win the dynamic linker's search over our own bundled stub. Our
+# libcuda.so.1 stub is a fallback for nodes with no real driver at all,
+# not something that should ever shadow a real one.
+export LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}:/leukoquant/leukoquant/external/niftyreg/gpu/lib"
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -91,6 +115,10 @@ while [[ $# -gt 0 ]]; do
             QC_REPORT="$2"
             shift 2
             ;;
+        --platf)
+            PLATF="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown option: $1"
             exit 1
@@ -116,6 +144,7 @@ SCRATCH_DIR="${_scratch_base}/metrics_calc_${SUBJECT}"
 mkdir -p "$SCRATCH_DIR"
 
 function cleanup {
+    stop_peak_mem_monitor
     rm -rf "$SCRATCH_DIR"
 }
 
@@ -128,6 +157,30 @@ trap cleanup EXIT ERR INT TERM
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
+# Copies a SAN-hosted input (subject T1, FA skeleton, tracula outputs, etc.)
+# into this job's own local /scratch0 the first time it's needed, so
+# repeated NiftyReg reads of the same file (e.g. T1_FILE, read as -ref by
+# every dwi-space manifest entry that needs resampling) hit local disk
+# instead of the storage network on every call, and even a single-use read
+# becomes one efficient sequential transfer instead of NiftyReg's own
+# scattered I/O pattern against a network mount. Idempotent within a job (a
+# plain -f check is enough -- this script processes one subject per job,
+# single-threaded, no concurrent-writer race to guard against).
+# Echoes the local path; caller does `VAR=$(materialize_to_scratch ...)`.
+materialize_to_scratch() {
+    local san_path="$1"
+    local scratch_subdir="$2"
+
+    local dest_dir="$SCRATCH_DIR/_san_cache/$scratch_subdir"
+    mkdir -p "$dest_dir"
+    local dest="$dest_dir/$(basename "$san_path")"
+
+    if [ ! -f "$dest" ]; then
+        cp "$san_path" "$dest"
+    fi
+    echo "$dest"
+}
 
 print_image_info() {
     local label="$1"
@@ -455,7 +508,9 @@ if [ -n "$AUTO_FA_SKELETON_PATH" ] && [ -f "$AUTO_FA_SKELETON_PATH" ]; then
         FA_REGISTERED_DIR="$SCRATCH_DIR/MGH35_HCP_FA_SUBJECT_SPACE"
         mkdir -p "$FA_REGISTERED_DIR"
 
-        FA_FILE="$AUTO_FA_SKELETON_PATH"
+        # Materialized once here: read as -ref by both reg_aladin and
+        # reg_f3d below, up to MAX_ATLAS_REG_ATTEMPTS times each on retry.
+        FA_FILE=$(materialize_to_scratch "$AUTO_FA_SKELETON_PATH" "fa_skeleton")
         MGH2SUBJ_AFF="$FA_REGISTERED_DIR/mgh2subj_affine.txt"
         MGH2SUBJ_CPP="$FA_REGISTERED_DIR/mgh2subj_cpp.nii.gz"
         RES_FA="$FA_REGISTERED_DIR/fa_in_template.nii.gz"
@@ -478,24 +533,26 @@ if [ -n "$AUTO_FA_SKELETON_PATH" ] && [ -f "$AUTO_FA_SKELETON_PATH" ]; then
 
             # Affine register Subject FA to MGH35 template.
             echo "  Affine registration (reg_aladin): FA → MGH35 template"
-            reg_aladin \
+            "$NIFTYREG_GPU_BIN/reg_aladin" \
             -ref "$FA_FILE"    \
             -flo "$MGH35_HCP_FA_TEMPLATE"    \
             -aff "$MGH2SUBJ_AFF" \
             -res "$FA_REGISTERED_DIR/fa_aladin_result.nii.gz" \
             -omp "$THREADS"     \
-            -voff > /dev/null
+            -platf "$PLATF"     \
+            -voff
 
             # Non-linear CPP refinement.
             echo "  Non-linear registration (reg_f3d): FA → MGH35 template"
-            reg_f3d \
+            "$NIFTYREG_GPU_BIN/reg_f3d" \
             -ref "$FA_FILE"  \
             -flo "$MGH35_HCP_FA_TEMPLATE"  \
             -aff "$MGH2SUBJ_AFF"     \
             -cpp "$MGH2SUBJ_CPP"        \
             -res "$RES_FA"     \
             -omp "$THREADS"    \
-            -voff > /dev/null
+            -platf "$PLATF"    \
+            -voff
 
             # Convert CPP to a dense forward deformation field on the FA grid.
             # Each FA voxel stores the corresponding MGH35 world-mm coordinate
@@ -506,7 +563,7 @@ if [ -n "$AUTO_FA_SKELETON_PATH" ] && [ -f "$AUTO_FA_SKELETON_PATH" ]; then
             # The CPP file is auto-detected as a recognised transformation type.
             reg_transform \
             -ref "$FA_FILE" \
-            -def "$MGH2SUBJ_CPP" "$FA_TO_MGH35_DEF" > /dev/null
+            -def "$MGH2SUBJ_CPP" "$FA_TO_MGH35_DEF"
 
             # Validate registration accuracy before trusting it for the atlas fallback.
             # See check_atlas_registration.py's docstring for why this check exists
@@ -561,14 +618,15 @@ if [ -n "$AUTO_FA_SKELETON_PATH" ] && [ -f "$AUTO_FA_SKELETON_PATH" ]; then
         eval "$density_map_cmd" > /dev/null
 
         # Resample density map to subject space using inverted CPP
-        reg_resample \
+        "$NIFTYREG_GPU_BIN/reg_resample" \
         -ref "$FA_FILE" \
         -flo "$density_map_MGH35_space" \
         -trans "$MGH2SUBJ_CPP" \
         -res "$pd_trk_dest" \
         -omp "$THREADS" \
+        -platf "$PLATF" \
         -inter 1 \
-        -voff > /dev/null
+        -voff
 
         # Make sure output values are larger than 0
         fslmaths "$pd_trk_dest" -thr 0 "$pd_trk_dest" > /dev/null
@@ -641,6 +699,7 @@ if [ "$NEED_DWI_TO_T1_REG" = "true" ] && [ -n "$DWI" ] && [ "$DWI" != "None" ] &
             --skip-skullstrip-t1 "$SKIP_SKULLSTRIP_T1"
             --skip-skullstrip-dwi "$SKIP_SKULLSTRIP_DWI"
             --verbose "$VERBOSE"
+            --platf "$PLATF"
         )
         if [ -n "$BVAL" ] && [ "$BVAL" != "None" ]; then
             REG_ARGS+=(--bval "$BVAL")
@@ -672,6 +731,12 @@ B0_BRAIN="$REG_DIR/b0_brain.nii.gz"
 
 mkdir -p "$T1_SPACE_DIR/tractography" "$T1_SPACE_DIR/lesion" "$T1_SPACE_DIR/t1" "$T1_SPACE_DIR/metrics" "$T1_SPACE_DIR/skeleton" "$T1_SPACE_DIR/tract_atlas"
 
+# Materialized once here: used as -ref by every reg_resample call in the
+# manifest loop below (one per dwi-space entry that needs T1-space
+# projection), instead of re-reading it from the SAN on each one.
+if [ -n "$T1_FILE" ] && [ -f "$T1_FILE" ]; then
+    T1_FILE=$(materialize_to_scratch "$T1_FILE" "t1")
+fi
 
 if [ -s "$INPUT_MANIFEST" ]; then
     echo ""
@@ -732,13 +797,15 @@ if [ -s "$INPUT_MANIFEST" ]; then
             # Skip resampling path.pd.nii.gz directly; we only create tracts.nii.gz downstream
             if [ "$category" != "tractography" ]; then
                 if [ ! -f "$dest" ]; then
-                    reg_resample \
+                    _src_local=$(materialize_to_scratch "$src" "manifest/$category/$subcat")
+                    "$NIFTYREG_GPU_BIN/reg_resample" \
                         -ref "$T1_FILE" \
-                        -flo "$src" \
+                        -flo "$_src_local" \
                         -trans "$DIFF2T1_AFF" \
                         -res "$dest" \
+                        -platf "$PLATF" \
                         -inter 1 \
-                        -voff > /dev/null 2>&1
+                        -voff
                 fi
             fi
         else
@@ -789,24 +856,27 @@ if [ -s "$INPUT_MANIFEST" ]; then
                         eval "$generate_dwi_density_cmd" > /dev/null
 
                         # 2. Resample the B0 density map to T1 space (used directly for metrics)
-                        reg_resample \
+                        "$NIFTYREG_GPU_BIN/reg_resample" \
                         -ref "$T1_FILE" \
                         -flo "$pd_nii_dwi" \
                         -trans "$DIFF2T1_AFF" \
                         -res "$pd_nii_dest" \
+                        -platf "$PLATF" \
                         -inter 1 \
-                        -voff > /dev/null
+                        -voff
 
                         # Resample original path.pd.nii.gz to T1 space for comparison
                         pd_nii_t1_tracula_registered="$SCRATCH_DIR/tractography_tracula_pd_t1_${subcat}.nii.gz"
                         if [ -f "$src_parent/path.pd.nii.gz" ]; then
-                            reg_resample \
+                            _path_pd_local=$(materialize_to_scratch "$src_parent/path.pd.nii.gz" "manifest/tractography/$subcat")
+                            "$NIFTYREG_GPU_BIN/reg_resample" \
                             -ref "$T1_FILE" \
-                            -flo "$src_parent/path.pd.nii.gz" \
+                            -flo "$_path_pd_local" \
                             -trans "$DIFF2T1_AFF" \
                             -res "$pd_nii_t1_tracula_registered" \
+                            -platf "$PLATF" \
                             -inter 1 \
-                            -voff > /dev/null
+                            -voff
                         fi
 
                         # 3. Transform TRK and generate density map directly from transformed TRK

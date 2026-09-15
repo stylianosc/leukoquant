@@ -5,6 +5,7 @@ import pytest
 from leukoquant.utils.metrics_calc import (
     _compute_load,
     _compute_tiv_from_array,
+    _compute_whole_brain_lesion_microstructure_metrics,
     _summary_nonzero,
     _summary_change_nonzero,
     _parse_lesion_spec,
@@ -234,3 +235,139 @@ class TestParseNamedSpec:
         """Test that empty path raises."""
         with pytest.raises(ValueError, match="path must be non-empty"):
             _parse_named_spec("fa=")
+
+
+class TestComputeWholeBrainLesionMicrostructureMetrics:
+    """Test _compute_whole_brain_lesion_microstructure_metrics function."""
+
+    def test_column_naming(self):
+        """Column names follow {map}_{lesion}_map_wb_{region}_{stat}."""
+        shape = (4, 4, 4)
+        map_arrays = {"fa": np.ones(shape)}
+        lesion_arrays = {"wmh": np.zeros(shape)}
+        lesion_arrays["wmh"][0, 0, 0] = 0.8
+        binary_lesion_arrays = {"wmh": (lesion_arrays["wmh"] > 0).astype(np.uint8)}
+        penumbras_arrays = {"wmh": np.zeros(shape, dtype=np.uint8)}
+        penumbras_arrays["wmh"][0, 0, 1] = 1
+        dilated_lesion_arrays = {
+            "wmh": binary_lesion_arrays["wmh"] | penumbras_arrays["wmh"]
+        }
+
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays=map_arrays,
+            lesion_arrays=lesion_arrays,
+            binary_lesion_arrays=binary_lesion_arrays,
+            penumbras_arrays=penumbras_arrays,
+            dilated_lesion_arrays=dilated_lesion_arrays,
+        )
+
+        assert len(df) == 1
+        assert df.iloc[0]["subject"] == "sub-01"
+        for region in ("lesion_binary", "lesion_pd", "penumbra", "dilated_lesion"):
+            for stat in ("min", "max", "mean", "sum", "median", "std", "25th", "75th",
+                        "IQR", "peak_width"):
+                assert f"fa_wmh_map_wb_{region}_{stat}" in df.columns
+
+    def test_empty_lesion_gives_zero_stats(self):
+        """An all-zero lesion mask yields the _summary_nonzero zero-fill, not NaN/crash."""
+        shape = (4, 4, 4)
+        map_arrays = {"fa": np.ones(shape)}
+        lesion_arrays = {"wmh": np.zeros(shape)}
+        binary_lesion_arrays = {"wmh": np.zeros(shape, dtype=np.uint8)}
+        penumbras_arrays = {"wmh": np.zeros(shape, dtype=np.uint8)}
+        dilated_lesion_arrays = {"wmh": np.zeros(shape, dtype=np.uint8)}
+
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays=map_arrays,
+            lesion_arrays=lesion_arrays,
+            binary_lesion_arrays=binary_lesion_arrays,
+            penumbras_arrays=penumbras_arrays,
+            dilated_lesion_arrays=dilated_lesion_arrays,
+        )
+        assert df.iloc[0]["fa_wmh_map_wb_lesion_binary_mean"] == 0.0
+        assert df.iloc[0]["fa_wmh_map_wb_lesion_binary_sum"] == 0.0
+
+    def test_partial_overlap_values(self):
+        """Values are map x region, summarised over the whole brain (no tract mask)."""
+        shape = (2, 2, 2)
+        fa = np.full(shape, 2.0)
+        binary = np.zeros(shape, dtype=np.uint8)
+        binary[0, 0, 0] = 1
+        binary[0, 0, 1] = 1  # 2 lesion voxels, both map value 2.0
+
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays={"fa": fa},
+            lesion_arrays={"wmh": binary.astype(float)},
+            binary_lesion_arrays={"wmh": binary},
+            penumbras_arrays={"wmh": np.zeros(shape, dtype=np.uint8)},
+            dilated_lesion_arrays={"wmh": binary},
+        )
+        row = df.iloc[0]
+        assert row["fa_wmh_map_wb_lesion_binary_sum"] == 4.0  # 2 voxels x 2.0
+        assert row["fa_wmh_map_wb_lesion_binary_mean"] == 2.0
+        assert row["fa_wmh_map_wb_lesion_binary_max"] == 2.0
+        assert row["fa_wmh_map_wb_lesion_binary_min"] == 2.0
+
+    def test_multiple_lesions_and_maps(self):
+        """Every (map, lesion) pair gets its own column set -- no cross-contamination."""
+        shape = (3, 3, 3)
+        map_arrays = {"fa": np.ones(shape), "md": np.full(shape, 3.0)}
+        binary_lesion_arrays = {
+            "lesion_a": np.zeros(shape, dtype=np.uint8),
+            "lesion_b": np.zeros(shape, dtype=np.uint8),
+        }
+        binary_lesion_arrays["lesion_a"][0, 0, 0] = 1
+        binary_lesion_arrays["lesion_b"][1, 1, 1] = 1
+        lesion_arrays = {k: v.astype(float) for k, v in binary_lesion_arrays.items()}
+        penumbras_arrays = {k: np.zeros(shape, dtype=np.uint8) for k in binary_lesion_arrays}
+        dilated_lesion_arrays = binary_lesion_arrays
+
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays=map_arrays,
+            lesion_arrays=lesion_arrays,
+            binary_lesion_arrays=binary_lesion_arrays,
+            penumbras_arrays=penumbras_arrays,
+            dilated_lesion_arrays=dilated_lesion_arrays,
+        )
+        row = df.iloc[0]
+        assert row["fa_lesion_a_map_wb_lesion_binary_sum"] == 1.0
+        assert row["md_lesion_a_map_wb_lesion_binary_sum"] == 3.0
+        assert row["fa_lesion_b_map_wb_lesion_binary_sum"] == 1.0
+        assert row["md_lesion_b_map_wb_lesion_binary_sum"] == 3.0
+
+    def test_missing_optional_region_arrays_no_crash(self):
+        """A lesion with no penumbra/dilated entry just omits those columns."""
+        shape = (2, 2, 2)
+        binary = np.zeros(shape, dtype=np.uint8)
+        binary[0, 0, 0] = 1
+
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays={"fa": np.ones(shape)},
+            lesion_arrays={},  # no pd array for this lesion
+            binary_lesion_arrays={"wmh": binary},
+            penumbras_arrays={},  # no penumbra array for this lesion
+            dilated_lesion_arrays={},  # no dilated array for this lesion
+        )
+        assert "fa_wmh_map_wb_lesion_binary_sum" in df.columns
+        assert "fa_wmh_map_wb_lesion_pd_sum" not in df.columns
+        assert "fa_wmh_map_wb_penumbra_sum" not in df.columns
+        assert "fa_wmh_map_wb_dilated_lesion_sum" not in df.columns
+
+    def test_no_lesions_returns_subject_only_row(self):
+        """No lesion masks at all still returns a valid single-row DataFrame."""
+        df = _compute_whole_brain_lesion_microstructure_metrics(
+            subject="sub-01",
+            map_arrays={"fa": np.ones((2, 2, 2))},
+            lesion_arrays={},
+            binary_lesion_arrays={},
+            penumbras_arrays={},
+            dilated_lesion_arrays={},
+        )
+        assert len(df) == 1
+        assert df.iloc[0]["subject"] == "sub-01"
+        assert list(df.columns) == ["subject"]

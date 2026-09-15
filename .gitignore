@@ -35,6 +35,7 @@ leukoquant/workflow/workflows/logs
 *.nii.gz
 *.mgz
 *.sif
+*.sif.lock
 *combined_metrics_results.csv
 
 # Licenses - kept locally, never committed (but track the empty directory)
@@ -43,14 +44,12 @@ leukoquant/licenses/*
 leukoquant/external/gif/GIF/
 
 # Project-specific exclusions
-Code
+/Code
 data
 NOTES
 examples
 gif_anonymisation_experiment
 leukoquant/workflow/licenses/*
-leukoquant/external/bamos/NiftySeg_0.9.4/
-leukoquant/external/bamos/seg-apps-old
 
 # Hidden subdirectory contents (e.g. .snakemake inside subdirs)
 */.*/*
@@ -83,3 +82,10 @@ clinical_data*.csv
 demographics*.csv
 *_subjects_*.txt
 !leukoquant/tests/**/*subjects*.txt
+
+# Large CUDA math libraries (cuSOLVER/cuBLAS/cuBLASLt/cuSPARSE) -- downloaded
+# on demand by ensure_niftyreg_cuda_libs() (leukoquant/utils/container_utils.py),
+# never committed (~1.25GB combined).
+leukoquant/external/niftyreg/gpu/lib/libcublas*.so*
+leukoquant/external/niftyreg/gpu/lib/libcusolver*.so*
+leukoquant/external/niftyreg/gpu/lib/libcusparse*.so*

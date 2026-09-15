@@ -35,12 +35,12 @@ def temp_dir():
 @pytest.fixture
 def gif_processor(temp_dir):
     """GIFProcessor pointed at a throwaway external/gif/ dir with just enough
-    structure to pass __init__'s validation (a stub GIF_111125.sh) -- never a
+    structure to pass __init__'s validation (a stub GIF_200826.sh) -- never a
     real GIF install."""
     external_dir = temp_dir / "external"
     gif_dir = external_dir / "gif"
     gif_dir.mkdir(parents=True)
-    (gif_dir / "GIF_111125.sh").write_text("#!/bin/bash\necho stub\n")
+    (gif_dir / "GIF_200826.sh").write_text("#!/bin/bash\necho stub\n")
     return GIFProcessor(external_dir=str(external_dir))
 
 

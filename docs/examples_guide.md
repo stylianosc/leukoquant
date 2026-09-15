@@ -93,6 +93,16 @@ leukoquant process-gif \
   --scheduler sge
 ```
 
+**GPU-accelerated execution (CUDA):**
+Accelerates GIF's NiftyReg registration steps using CUDA (requires NVIDIA GPU + driver on the execution host). CUDA math libraries are automatically downloaded from Hugging Face on first use.
+```bash
+leukoquant process-gif \
+  --subject sub-001/sub-001-ses-01 \
+  --t1 ./examples/sample_files/SCANS/{subject}/T1/I*.nii.gz \
+  --output-dir ./examples/outputs/new/gif_gpu \
+  --gpu
+```
+
 ---
 
 ## process-bamos

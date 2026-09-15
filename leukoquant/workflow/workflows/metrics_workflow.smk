@@ -33,7 +33,7 @@ if not LEUKOQUANT_PARENT_DIR:
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
 
 from leukoquant.utils.z_score_utils import translate_path
-from leukoquant.utils.container_utils import ensure_container
+from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_gpu, ensure_niftyreg_cuda_libs
 
 # Standalone `process-metrics` invokes Snakemake with --configfile=<...>/metrics_config.yaml,
 # which Snakemake's own CLI already merges into `config` before this file runs -- so `config`
@@ -61,6 +61,21 @@ PARCELLATIONS     = cfg.get("parcellations", [cfg.get("parcellation", "freesurfe
 if isinstance(PARCELLATIONS, str):
     PARCELLATIONS = [p.strip() for p in PARCELLATIONS.split(",") if p.strip()]
 
+# Tract-mask source, forwarded to metrics_calc.sh's --tract-mode:
+#   tractography        - the subject's own TRACULA streamline-density map only
+#   atlas               - the population HCP tract atlas warped to the subject's
+#                         FA (no per-subject tractography needed)
+#   tractography-atlas  - (default) subject tractography, per-tract atlas
+#                         fallback when a tract fails QC
+# metrics_calc.sh already parses --tract-mode and self-generates the warped
+# atlas tracts on every run; this value was previously never passed through, so
+# every run silently used the default regardless of --tract-mode.
+TRACT_MODE = cfg.get("tract_mode") or "tractography-atlas"
+# A non-default mode writes to a parallel metrics-{parc}-{mode}/ tree so a
+# comparison run never overwrites the standard tractography-atlas results.
+# Default mode keeps the historical metrics-{parc}/ path unchanged.
+_MODE_TAG = "" if TRACT_MODE == "tractography-atlas" else "-" + TRACT_MODE
+
 # When True, metric base paths already point to the exact directory containing
 # the files (no per-subject subfolder), so the subject ID is not appended.
 # This is used when process_all passes fully-qualified per-subject metric paths.
@@ -79,6 +94,19 @@ CONTAINER_SIF = os.path.join(
     cfg.get("container_name", "freesurfer_unified_container") + ".sif"
 )
 ensure_container(CONTAINER_SIF)
+
+# Opt-in GPU acceleration for NiftyReg registration steps (default off,
+# CPU-only behaviour unchanged). Only downloads the CUDA NiftyReg build
+# when actually requested. See leukoquant/utils/container_utils.py.
+USE_GPU = cfg.get("use_gpu", False)
+PLATF = 1 if USE_GPU else 0
+# NiftyReg's build is a single unified binary supporting both -platf 0 (CPU)
+# and -platf 1 (CUDA), so both ensure calls run unconditionally, not gated
+# behind USE_GPU -- there's no separate CPU-only NiftyReg build to fall back
+# to (confirmed 2026-08-25: NIFTYREG_GPU_BIN is the only binary path
+# metrics_calc.sh ever references, regardless of --platf).
+ensure_niftyreg_gpu(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
+ensure_niftyreg_cuda_libs(os.path.join(LEUKOQUANT_PARENT_DIR, "leukoquant/external/niftyreg/gpu"))
 
 BIND_MAP = cfg.get("singularity_binds", {})
 METRICS_SCRIPT_SIF = "/leukoquant/leukoquant/utils/metrics_calc.sh"
@@ -124,12 +152,12 @@ def _sif_tractography_path(subject, parcellation=None):
 
 def _sif_output_dir(subject, parcellation=None):
     _parc = parcellation or PARCELLATIONS[0]
-    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}/outputs"
+    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/outputs"
     return translate_path(str(Path(folder).resolve()), BIND_MAP)
 
 def _sif_logs_dir(subject, parcellation=None):
     _parc = parcellation or PARCELLATIONS[0]
-    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}/logs"
+    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/logs"
     return translate_path(str(Path(folder).resolve()), BIND_MAP)
 
 def _sif_qc_report(subject, parcellation=None):
@@ -261,21 +289,23 @@ wildcard_constraints:
 rule all:
     input:
         # Always-present per-subject outputs
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}/outputs/metrics/whole_brain_metrics.csv"
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}/outputs/metrics/tract_level_metrics.csv"
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}/outputs/metrics/skeleton_metrics.csv"
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"
+         for subject in SUBJECTS for parc in PARCELLATIONS] +
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
         # Per-lesion outputs (empty list when no lesion path is configured)
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}/outputs/metrics/{ln}_lesion_metrics.csv"
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS for ln in LESION_NAMES] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv"
+        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS for ln in LESION_NAMES]
 
 for _parc in PARCELLATIONS:
     rule:
-        name: f"extract_metrics_{_parc}"
+        name: f"extract_metrics_{_parc}{_MODE_TAG.replace(chr(45), chr(95))}"
         input:
             # Cross-module dependencies - empty lists in standalone context.
             # process_all populates these maps so Snakemake builds the full DAG.
@@ -291,15 +321,32 @@ for _parc in PARCELLATIONS:
             ),
             z_scores=lambda wc, m=_z_score_map: (m.get(wc.subject) or []),
         output:
-            csv=f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}/outputs/metrics/whole_brain_metrics.csv",
-            tract_level_metrics=f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}/outputs/metrics/tract_level_metrics.csv",
-            skeleton_metrics=f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}/outputs/metrics/skeleton_metrics.csv",
+            # update() -- without it, Snakemake deletes all of these before
+            # invoking the rule whenever it's scheduled to rerun, even for a
+            # spurious/interrupted reason. Confirmed as real data loss
+            # 2026-08-30: a metrics-gif rerun (triggered by the now-fixed
+            # code-changed mass-rerun bug) got killed mid-write by an
+            # unrelated `qdel -u`, and because these outputs weren't
+            # update()-protected, the subject was left with nothing --
+            # Snakemake had already deleted the prior good CSVs before the
+            # interrupted recompute could replace them. update() means a
+            # subject that already has valid output is never wiped just
+            # because Snakemake schedules the rule to run again.
+            csv=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"),
+            tract_level_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"),
+            skeleton_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"),
+            # Added 2026-09-13 -- metrics_calc.py has written this file unconditionally
+            # since af86fcfd, so every subject whose metrics rule has fired since then
+            # already has it; declaring it here only newly schedules a rerun for
+            # subjects who haven't had metrics_calc run since. See
+            # leukoquant-experiments/future_plans/whole_brain_lesion_metrics.md.
+            whole_brain_lesion_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"),
             lesion_metrics=[
-                f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}/outputs/metrics/{ln}_lesion_metrics.csv"
+                update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv")
                 for ln in LESION_NAMES
             ],
             lesion_tract_aggregated=[
-                f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv"
+                update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv")
                 for ln in LESION_NAMES
             ],
         container:
@@ -313,25 +360,44 @@ for _parc in PARCELLATIONS:
             output_dir_sif=lambda wildcards, p=_parc: _sif_output_dir(wildcards.subject, p),
             verbose=VERBOSE,
             metrics_script_sif=METRICS_SCRIPT_SIF,
+            tract_mode=TRACT_MODE,
             qc_report_sif=lambda wildcards, p=_parc: _sif_qc_report(wildcards.subject, p),
             log_file=lambda wildcards, p=_parc: f"{_sif_logs_dir(wildcards.subject, p)}/metrics_log.txt",
             error_file=lambda wildcards, p=_parc: f"{_sif_logs_dir(wildcards.subject, p)}/metrics_error.txt",
+            platf=PLATF,
         resources:
-            # Bumped from 16GB (2026-08-16): mri_synthstrip (CPU-only CNN
-            # skull-strip, register_dwi_to_t1.sh) spikes to ~4.7GB in one
-            # allocation and intermittently OOM'd 24/816 ADNI3 subjects at
-            # 16GB. 18GB is a modest first try, not a large blanket bump.
-            mem_mb=18 * 1024,
-            disk_mb=2 * 1024,
+            # Set back to 16GB (2026-08-30): the 16GB->18GB bump
+            # (2026-08-16, for mri_synthstrip OOMing 24/816 ADNI3 subjects)
+            # was never confirmed with real numbers, just a guess. Testing
+            # at 16GB again with the new peak-RSS monitor (bash_utils.sh's
+            # start_peak_mem_monitor, wired into metrics_calc.sh's cleanup
+            # trap) to get real per-subject peak usage before picking a
+            # value -- rather than guessing again after the DPUK
+            # NEW002_PETMR_V2 / ADNI3 subj-007-s-6120 NiftyReg crashes.
+            mem_mb=16 * 1024,
+            # Bumped from 2GB (2026-08-22): metrics_calc.sh's own
+            # materialize_to_scratch() (added the same day as
+            # z_score_calc.sh's, to cut SAN load) adds a modest amount of
+            # local scratch usage on top of this rule's existing needs --
+            # single-subject scale (T1, FA skeleton, a few manifest files).
+            # Real data confirms metrics-gif/metrics-fs are a small minority
+            # of disk-full failures (~11 of 480+ across all 4 datasets,
+            # stage_census.py --detailed, 2026-08-22) -- unlike z-score,
+            # which scales with num_healthy and needed an actual dynamic
+            # formula above -- so a small flat bump is enough headroom here.
+            disk_mb=3 * 1024,
             time="24:00:00",
             name=f"metrics_{_parc}",
-            workdir=lambda wildcards, p=_parc: f"{OUTPUT_DIR}/{wildcards.subject}/metrics-{p}",
+            workdir=lambda wildcards, p=_parc: f"{OUTPUT_DIR}/{wildcards.subject}/metrics-{p}{_MODE_TAG}",
+            sge_resources=("gpu=true" if USE_GPU else ""),
+            sge_pe=("gpu" if USE_GPU else None),
         shell:
             """
             source /leukoquant/leukoquant/utils/bash_utils.sh
             mkdir -p "$(dirname "{params.log_file}")"
             exec > "{params.log_file}"
             exec 2> "{params.error_file}"
+            require_gpu_if_platf1 "{params.platf}"
 
             echo "Date: $(date)"
             echo "Date: $(date)" >&2
@@ -347,15 +413,25 @@ for _parc in PARCELLATIONS:
                 VERBOSE_FLAG="--verbose"
             fi
 
+            # Every optional param below is single-quoted, not double-quoted: under
+            # this project's SGE executor, Snakemake's param substitution silently
+            # STRIPS surrounding double-quote characters (a double-quoted empty
+            # value renders as literally nothing, shifting every later flag/value
+            # pair left by one position), while single-quoted references survive
+            # substitution intact, including as a real empty '' token when the
+            # value is genuinely empty -- see z_score_workflow.smk's CMD block for
+            # the confirmed production incident this exact pattern caused there.
             bash {params.metrics_script_sif} \
                 --subject {wildcards.subject} \
                 --tractography-path {params.tractography_path_sif} \
+                --tract-mode '{params.tract_mode}' \
                 --output-dir {params.output_dir_sif} \
-                --lesion-path "{params.lesion_path_sif}" \
-                --t1-path "{params.t1_path_sif}" \
-                --dwi "{params.dwi_path_sif}" \
-                --metrics "{params.metrics_sif_spec}" \
-                --qc-report "{params.qc_report_sif}" \
+                --lesion-path '{params.lesion_path_sif}' \
+                --t1-path '{params.t1_path_sif}' \
+                --dwi '{params.dwi_path_sif}' \
+                --metrics '{params.metrics_sif_spec}' \
+                --qc-report '{params.qc_report_sif}' \
+                --platf {params.platf} \
                 $VERBOSE_FLAG \
                 --output-csv {params.output_dir_sif}
             """

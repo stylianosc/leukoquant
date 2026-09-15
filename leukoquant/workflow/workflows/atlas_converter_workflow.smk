@@ -117,12 +117,14 @@ rule convert_atlas:
         export LC_NUMERIC="en_US.UTF-8"
         export PYTHONUNBUFFERED=1
 
+        tmp_out="$(make_tmp_path "{params.output_singularity}")"
         python /leukoquant/leukoquant/utils/atlas_converter.py \
-            --input-parcellation {params.input_singularity} \
-            --mapping-file {params.mapping_file_singularity} \
-            --output-path {params.output_singularity} \
+            --input-parcellation '{params.input_singularity}' \
+            --mapping-file '{params.mapping_file_singularity}' \
+            --output-path "$tmp_out" \
             {params.validate_flag} \
             {params.verbose_flag}
+        mv -f "$tmp_out" "{params.output_singularity}"
 
         echo "Date: $(date)"
         echo "Date: $(date)" >&2

@@ -1,5 +1,3 @@
-import pandas as pd
-import warnings
 #!/usr/bin/env python3
 """
 Tractography QC utility script for leukoquant.
@@ -14,12 +12,19 @@ Arguments:
 """
 
 import argparse
+import glob
 import os
 from pathlib import Path
-import glob
+import warnings
 import numpy as np
-from dipy.io.streamline import load_tractogram
-from dipy.tracking import utils
+import pandas as pd
+
+try:
+    from dipy.io.streamline import load_tractogram
+    from dipy.tracking import utils
+except ImportError:
+    load_tractogram = None
+    utils = None
 
 
 def find_tract_files(subject: str, tractography_path: str, skip_subject_dir: bool = False):
@@ -153,6 +158,9 @@ def qc_tract_file(tract_file: str) -> dict:
             warnings.warn(f"File {tract_file} is not a .trk file. Only .trk files are supported for QC.")
             qc_result["reason"] = "Not a .trk file. Only .trk files are supported for QC."
             qc_result["qc_pass"] = False
+        if load_tractogram is None:
+            qc_result["reason"] = "dipy is required for .trk QC. Please install dipy."
+            qc_result["qc_pass"] = False
             return qc_result
         try:
             sft = load_tractogram(tract_file, reference="same")
@@ -200,9 +208,14 @@ def run_tract_qc(subject: str, tractography_path: str, output_path: Optional[str
 
     os.makedirs(output_dir, exist_ok=True)
     print(f"Output Dir: {output_dir}, Output Path: {output_path}, Output CSV: {output_csv}")
-    # Write all fields from all QC result dicts using pandas
+    # Write all fields from all QC result dicts using pandas. Written via
+    # metrics_calc.write_csv (temp path + os.replace) rather than a bare
+    # to_csv(), so a job killed mid-write (walltime, OOM, an unrelated qdel)
+    # leaves either the last fully-valid qc_report.csv or none at all, never
+    # a truncated one a downstream consumer could read without erroring.
     df = pd.DataFrame(report["qc_results"])
-    df.to_csv(output_csv, index=False)
+    from metrics_calc import write_csv
+    write_csv(df, output_csv)
     print(f"QC results written to {output_csv}")
 
 def main():

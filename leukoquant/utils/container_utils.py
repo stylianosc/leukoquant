@@ -18,6 +18,21 @@ Usage (at the top of any workflow .smk file or processor):
         sif_path="/path/to/containers/miniconda_unified_container.sif",
         filename=MINICONDA_SIF_HF_PATH,
     )
+
+Also provides ensure_gif_db() (GIF anatomical atlas database), which
+follows the same download-if-missing, lock-guarded pattern, adapted for
+a tarball-of-a-directory payload instead of a single file.
+
+The CUDA-enabled NiftyReg build (leukoquant/external/niftyreg/gpu/) is
+NOT downloaded - unlike the .sif containers and the GIF atlas database,
+it turned out small enough (~40MB; this build statically links the CUDA
+math runtime, confirmed via ldd) to commit directly into the repo. Use
+ensure_niftyreg_gpu() below to sanity-check it's present (e.g. after a
+shallow/partial checkout) rather than to fetch it.
+
+    from leukoquant.utils.container_utils import ensure_niftyreg_gpu
+
+    ensure_niftyreg_gpu(niftyreg_gpu_dir="/path/to/leukoquant/external/niftyreg/gpu")
 """
 
 from __future__ import annotations
@@ -52,6 +67,10 @@ GIF_DB_HF_REPO = "stylianosc/gif-database"
 # + labels/).
 GIF_DB_T1_FILENAME    = "db_mideface.tar.gz"
 GIF_DB_FLAIR_FILENAME = "db_FLAIR_mideface.tar.gz"
+
+# CUDA-enabled NiftyReg build (reg_aladin/reg_f3d/etc + a driver stub they
+# need to even launch on GPU-less nodes) lives directly in the repo at
+# leukoquant/external/niftyreg/gpu/ - see ensure_niftyreg_gpu() below.
 
 # How long a caller will wait for another process's in-progress download
 # before giving up. Generous, since large containers can legitimately take
@@ -348,5 +367,179 @@ def _download_gif_db(db_path: Path, parent_dir: Path, hf_repo: str, filename: st
 
     print(
         f"[container_utils] Download complete: {db_path}",
+        flush=True,
+    )
+
+
+def ensure_niftyreg_gpu(niftyreg_gpu_dir: str) -> None:
+    """
+    Verify the CUDA-enabled NiftyReg build is present at `niftyreg_gpu_dir`
+    (i.e. that `niftyreg_gpu_dir/bin/reg_aladin` exists).
+
+    Unlike ensure_container()/ensure_gif_db(), this does NOT download the
+    build itself: it's committed directly into the repo (~40MB). Raises a
+    clear error instead if it's missing, e.g. from a partial/shallow
+    checkout. As of the latest-upstream NiftyReg source (2026-08-25), this
+    build also dynamically links against cuSOLVER/cuBLAS/cuBLASLt/cuSPARSE
+    (a new dependency from CudaLts.cu's SVD-based affine optimiser, which
+    both reg_aladin itself and GIF's own SetInlierLts() call actually use --
+    confirmed not dead code) -- those ARE downloaded on demand, since at
+    ~1.25GB they're too large to commit. See ensure_niftyreg_cuda_libs()
+    below, which every caller of this function should also call.
+
+    Parameters
+    ----------
+    niftyreg_gpu_dir:
+        Absolute or relative path where the niftyreg_gpu directory should
+        exist, e.g. ".../leukoquant/external/niftyreg/gpu".
+    """
+    nrg_path = Path(niftyreg_gpu_dir)
+    marker = nrg_path / "bin" / "reg_aladin"
+    if not marker.is_file():
+        raise RuntimeError(
+            f"[container_utils] GPU-enabled NiftyReg not found at {nrg_path} "
+            f"(expected {marker}). This directory is committed directly in "
+            f"the repo under leukoquant/external/niftyreg/gpu/ - check that "
+            f"your checkout is complete (e.g. not a sparse/shallow clone "
+            f"that excluded it)."
+        )
+
+
+# The 4 dynamically-linked CUDA math libraries the new NiftyReg build needs
+# (see ensure_niftyreg_gpu()'s docstring) -- too large to commit directly
+# (~1.25GB combined), downloaded into niftyreg_gpu_dir/lib/ on first use
+# instead, same directory every consumer (z_score_calc.sh, metrics_calc.sh,
+# BaMoS's script, register_dwi_to_t1.sh, transform_trk.py, and GIF_200826.sh
+# via one added LD_LIBRARY_PATH entry) already adds to LD_LIBRARY_PATH, so
+# no consumer script needed editing beyond that one shared path.
+NIFTYREG_CUDA_LIBS_HF_REPO = "stylianosc/leukoquant"
+NIFTYREG_CUDA_LIBS_HF_PATH = "niftyreg/niftyreg_gpu_cuda_libs.tar.gz"
+NIFTYREG_CUDA_LIB_FILES = [
+    "libcusolver.so.11",
+    "libcublas.so.11",
+    "libcublasLt.so.11",
+    "libcusparse.so.11",
+]
+
+
+def ensure_niftyreg_cuda_libs(niftyreg_gpu_dir: str, hf_repo: str = NIFTYREG_CUDA_LIBS_HF_REPO) -> None:
+    """
+    Ensure the 4 large CUDA math libraries NiftyReg's GPU build dynamically
+    links against (cuSOLVER/cuBLAS/cuBLASLt/cuSPARSE) are present in
+    `niftyreg_gpu_dir/lib/`.
+
+    Needed unconditionally by every NiftyReg-GPU-build consumer -- z-score,
+    metrics, BaMoS, and GIF all share this one build via a single unified
+    binary that supports both -platf 0 (CPU) and -platf 1 (CUDA) in the same
+    executable, so the dynamic linker requires these libraries to even start
+    the process, regardless of which platform flag is actually used at
+    runtime. Not gated behind --gpu/USE_GPU for that reason (confirmed
+    2026-08-25: there is no separate CPU-only NiftyReg build in this
+    codebase to fall back to).
+
+    Unlike ensure_gif_db(), this merges into an already-populated directory
+    (niftyreg_gpu_dir/lib/ already holds the build's own libraries) rather
+    than atomically replacing the whole directory, so each of the 4 files is
+    placed with its own atomic os.replace() instead of one directory-level
+    rename.
+
+    Parameters
+    ----------
+    niftyreg_gpu_dir:
+        Absolute or relative path to the niftyreg_gpu directory (same one
+        passed to ensure_niftyreg_gpu()), e.g. ".../leukoquant/external/niftyreg/gpu".
+    hf_repo:
+        Hugging Face dataset repo ID hosting the tarball.
+    """
+    lib_dir = Path(niftyreg_gpu_dir) / "lib"
+    if all((lib_dir / f).is_file() for f in NIFTYREG_CUDA_LIB_FILES):
+        return  # already present, nothing to do
+
+    lib_dir.mkdir(parents=True, exist_ok=True)
+
+    lock_path = str(lib_dir) + ".cuda_libs.lock"
+    _acquire_lock(lock_path, lambda: all((lib_dir / f).is_file() for f in NIFTYREG_CUDA_LIB_FILES))
+    try:
+        # Re-check now that we hold the lock: another process may have
+        # already finished the download while we were waiting for it.
+        if all((lib_dir / f).is_file() for f in NIFTYREG_CUDA_LIB_FILES):
+            return
+        _download_niftyreg_cuda_libs(lib_dir, hf_repo)
+    finally:
+        try:
+            os.remove(lock_path)
+        except OSError:
+            pass  # already removed, or never fully created - not fatal
+
+
+def _download_niftyreg_cuda_libs(lib_dir: Path, hf_repo: str) -> None:
+    print(
+        f"[container_utils] NiftyReg CUDA math libraries not found in {lib_dir}\n"
+        f"[container_utils] Downloading '{NIFTYREG_CUDA_LIBS_HF_PATH}' "
+        f"(~1.25GB) from Hugging Face repo '{hf_repo}' -- this may take a while ...",
+        flush=True,
+    )
+
+    try:
+        from huggingface_hub import hf_hub_download
+        import logging as _logging
+        _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
+        _logging.getLogger("huggingface_hub.utils._http").setLevel(_logging.ERROR)
+        _logging.getLogger("httpx").setLevel(_logging.ERROR)
+    except ImportError:
+        print(
+            "[container_utils] ERROR: 'huggingface_hub' is not installed.\n"
+            "Install it with:  pip install huggingface_hub",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    import tarfile
+    import warnings
+    os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "0")
+    warnings.filterwarnings("ignore", message=".*unauthenticated.*")
+
+    parent_dir = lib_dir.parent
+    tmp_download_dir = tempfile.mkdtemp(dir=parent_dir, prefix=".hf_download_")
+    try:
+        downloaded = hf_hub_download(
+            repo_id=hf_repo,
+            filename=NIFTYREG_CUDA_LIBS_HF_PATH,
+            repo_type="dataset",
+            local_dir=tmp_download_dir,
+            token=os.environ.get("HF_TOKEN", None),
+        )
+
+        if os.path.islink(downloaded):
+            real_copy = os.path.join(tmp_download_dir, os.path.basename(NIFTYREG_CUDA_LIBS_HF_PATH))
+            shutil.copyfile(os.path.realpath(downloaded), real_copy)
+            downloaded = real_copy
+
+        tmp_extract_dir = tempfile.mkdtemp(dir=parent_dir, prefix=".hf_extract_")
+        try:
+            with tarfile.open(downloaded, "r:gz") as tf:
+                tf.extractall(tmp_extract_dir)
+
+            extracted_root = Path(tmp_extract_dir) / "cuda_libs"
+            missing = [f for f in NIFTYREG_CUDA_LIB_FILES if not (extracted_root / f).is_file()]
+            if missing:
+                raise RuntimeError(
+                    f"[container_utils] Downloaded archive '{NIFTYREG_CUDA_LIBS_HF_PATH}' is missing "
+                    f"expected file(s) {missing} under its top-level cuda_libs/ directory. "
+                    f"Found instead: {sorted(p.name for p in extracted_root.iterdir()) if extracted_root.is_dir() else 'cuda_libs/ absent'}"
+                )
+
+            # Each file placed with its own atomic rename -- lib_dir already
+            # has other content (the build's own libraries), so this merges
+            # in rather than replacing the whole directory in one rename.
+            for f in NIFTYREG_CUDA_LIB_FILES:
+                os.replace(extracted_root / f, lib_dir / f)
+        finally:
+            shutil.rmtree(tmp_extract_dir, ignore_errors=True)
+    finally:
+        shutil.rmtree(tmp_download_dir, ignore_errors=True)
+
+    print(
+        f"[container_utils] Download complete: {lib_dir}",
         flush=True,
     )

@@ -16,7 +16,7 @@ import yaml
 from leukoquant.utils.subject_utils import read_subjects, resolve_subject_pattern
 from leukoquant.utils.external_utils import check_sge_plugin, _resolve_fs_license
 from leukoquant.utils.bind_utils import dir_level_bind_files, consolidate_bind_entries
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 from leukoquant.utils.container_utils import (
     ensure_container,
     MINICONDA_SIF_FILENAME,
@@ -165,6 +165,7 @@ class NODDIProcessor:
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         snakemake_cmd.append("all")
 
         env = os.environ.copy()

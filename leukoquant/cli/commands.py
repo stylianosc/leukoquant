@@ -73,7 +73,8 @@ def process_all(subject: Optional[str] = None,
                 poly_terms: Optional[str] = None,
                 parcellation: str = "freesurfer",
                 force: bool = False,
-                config_yaml: Optional[str] = None) -> dict:
+                config_yaml: Optional[str] = None,
+                gpu: bool = False) -> dict:
     """Run full pipeline process-all.
 
     force: Force-rerun metrics extraction (for the given --parcellation)
@@ -96,6 +97,7 @@ def process_all(subject: Optional[str] = None,
             force_rules=_force_rules_for_parcellation("metrics_extract_metrics", parcellation, force),
             verbose=verbose,
             config_yaml=config_yaml,
+            gpu=gpu,
         )
         return results
     except Exception as e:
@@ -106,7 +108,8 @@ def process_gif(subject: Optional[str] = None, output_dir: Optional[str] = None,
                t1: Optional[str] = None, flair: Optional[str] = None,
                verbose: bool = False, mask_file: Optional[str] = None,
                scheduler: str = "local", cores: int = 1,
-               force: bool = False, config_yaml: Optional[str] = None) -> dict:
+               force: bool = False, config_yaml: Optional[str] = None,
+               gpu: bool = False) -> dict:
     """Process image(s) with GIF segmentation using Snakemake."""
     try:
         if verbose:
@@ -129,6 +132,7 @@ def process_gif(subject: Optional[str] = None, output_dir: Optional[str] = None,
             force_rules=_force_rules_for("gif", force),
             verbose=verbose,
             config_yaml=config_yaml,
+            gpu=gpu,
         )
 
         if not results.get("success"):
@@ -142,7 +146,7 @@ def process_gif(subject: Optional[str] = None, output_dir: Optional[str] = None,
 def process_bamos(subject: Optional[str] = None, flair: Optional[str] = None, t1: Optional[str] = None,
                  output_dir: Optional[str] = None, gif_results_dir: Optional[str] = None,
                  verbose: bool = False, scheduler: str = "local", cores: int = 1,
-                 force: bool = False, config_yaml: Optional[str] = None) -> dict:
+                 force: bool = False, config_yaml: Optional[str] = None, gpu: bool = False) -> dict:
     """Process FLAIR and T1 images with BaMoS lesion detection and corrections."""
     try:
         if verbose:
@@ -164,6 +168,7 @@ def process_bamos(subject: Optional[str] = None, flair: Optional[str] = None, t1
             force_rules=_force_rules_for("bamos", force),
             verbose=verbose,
             config_yaml=config_yaml,
+            use_gpu=gpu,
         )
 
         return results
@@ -378,7 +383,8 @@ def process_zscore(healthy_subjects_list: Optional[str],
                    cores: Optional[int] = None,
                    task_concurrency: Optional[int] = None,
                    config_yaml: Optional[str] = None,
-                   force: bool = False) -> dict:
+                   force: bool = False,
+                   gpu: bool = False) -> dict:
     """Run z-score workflow.
 
     Args:
@@ -442,6 +448,7 @@ def process_zscore(healthy_subjects_list: Optional[str],
             verbose=verbose,
             config_yaml=config_yaml,
             force_rules=_force_rules_for("zscore", force),
+            gpu=gpu,
         )
 
         return results
@@ -536,7 +543,8 @@ def process_metrics(subject: Optional[str] = None,
                     parcellation: str = "freesurfer",
                     force: bool = False,
                     verbose: bool = False,
-                    config_yaml: Optional[str] = None) -> dict:
+                    config_yaml: Optional[str] = None,
+                    gpu: bool = False) -> dict:
     """Calculate metrics along tracts, lesions, and WMH regions.
 
     Args:
@@ -579,6 +587,7 @@ def process_metrics(subject: Optional[str] = None,
             force_rules=_force_rules_for_parcellation("extract_metrics", parcellation, force),
             verbose=verbose,
             config_yaml=config_yaml,
+            gpu=gpu,
         )
 
         return results

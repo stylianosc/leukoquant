@@ -266,6 +266,7 @@ config_gif = {
     "conda_env_name": shared_conda_env_name,
     "containers": config.get("containers", {}),
     "keep_intermediate": keep_intermediate,
+    "use_gpu": config.get("use_gpu", False),
 }
 
 config_bamos = {
@@ -290,6 +291,7 @@ config_bamos = {
     "conda_env_name": shared_conda_env_name,
     "containers": config.get("containers", {}),
     "keep_intermediate": keep_intermediate,
+    "use_gpu": config.get("use_gpu", False),
 }
 
 # The default GIF → FreeSurfer label mapping ships with the repo.
@@ -473,8 +475,16 @@ if _include_z_score and _zscore_required_cols and _zscore_demo_csv:
     _demo_df[_demo_id_col] = _demo_df[_demo_id_col].astype(str)
     _demo_required_cols_present = [c for c in _zscore_required_cols if c in _demo_df.columns]
 
+    from leukoquant.utils.z_score_utils import demographics_rows_for_subject
+
     def _subject_has_complete_covariates(sid):
-        _row = _demo_df[_demo_df[_demo_id_col] == sid]
+        # Composite "subject/session" IDs (OASIS-3, EPAD) must be resolved
+        # against the session columns, not compared to `subject` alone -- doing
+        # the latter matched nothing and made every healthy subject look like it
+        # was missing its covariates, aborting the run. Shared with the design
+        # matrix builder so the gate and the GLM cannot disagree about which
+        # subjects are resolvable.
+        _row = demographics_rows_for_subject(_demo_df, sid, _demo_id_col)
         if _row.empty:
             return False
         if len(_demo_required_cols_present) < len(_zscore_required_cols):
@@ -534,6 +544,7 @@ config_metrics = {
     "conda_env_name": shared_conda_env_name,
     "containers": config.get("containers", {}),
     "keep_intermediate": keep_intermediate,
+    "use_gpu": config.get("use_gpu", False),
     "singularity_binds": _metrics_binds,
     # Cross-module dependency maps: per-subject paths to upstream outputs.
     # metrics_workflow.smk's for-loop rules read these to declare Snakemake DAG
@@ -623,6 +634,7 @@ config_z_score = {
     "conda_env_name": shared_conda_env_name,
     "containers": config.get("containers", {}),
     "singularity_binds": _zscore_binds,
+    "use_gpu": config.get("use_gpu", False),
 }
 
 # ── Module imports ────────────────────────────────────────────────────────────
@@ -715,8 +727,14 @@ use rule * from metrics as metrics_*
 # ── Z-score (optional cross-subject module) ──────────────────────────────────
 if _include_z_score:
     for _s in subjects:
-        os.makedirs(f"{output_dir}/{_s}/z_scores/logs",    exist_ok=True)
-        os.makedirs(f"{output_dir}/{_s}/z_scores/outputs", exist_ok=True)
+        # "z-score" (hyphenated, singular) -- matches TOOL_NAME in
+        # z_score_workflow.smk and the real path z_score_target_paths()
+        # returns (see that function's comment). This pre-scaffolding loop
+        # itself still said "z_scores" (underscore, plural) despite the
+        # rest of the file already being corrected, so it was creating an
+        # always-empty directory alongside the real one on every run.
+        os.makedirs(f"{output_dir}/{_s}/z-score/logs",    exist_ok=True)
+        os.makedirs(f"{output_dir}/{_s}/z-score/outputs", exist_ok=True)
 
     module z_score:
         snakefile: "z_score_workflow.smk"

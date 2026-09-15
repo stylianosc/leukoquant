@@ -41,6 +41,36 @@ def first_truthy(*values: object) -> Optional[str]:
     return None
 
 
+def add_rerun_triggers_args(snakemake_cmd: List[str]) -> None:
+    """Append --rerun-triggers mtime, in place.
+
+    Snakemake's default rerun_triggers includes CODE (plus PARAMS, INPUT,
+    SOFTWARE_ENV) on top of the always-on mtime staleness check -- meaning
+    any edit to a workflow file's shell/params, even an unrelated one-line
+    bugfix in a rule that has nothing to do with a given subject's actual
+    data, makes every subject with recorded metadata for that rule look
+    "changed" and get rescheduled, whether real work is needed or not.
+    Confirmed as the actual cause of two real incidents in the z-score
+    pipeline (2026-08-24/25 and 2026-08-29): a routine same-day edit to
+    z_score_workflow.smk correctly-per-Snakemake's-own-logic but
+    incorrectly-for-our-purposes re-flagged ~250 already-complete subjects
+    as needing a rerun (confirmed via Snakemake's own
+    summary(detailed=True): "rule implementation changed" against subjects
+    that already had complete, valid output).
+
+    Restricting to mtime alone keeps genuine staleness detection (an input
+    file actually changed) working exactly as before -- that check isn't
+    gated by rerun_triggers at all, only CODE/PARAMS/INPUT/SOFTWARE_ENV are
+    -- while removing the "we edited the pipeline today" false-positive
+    path entirely. A genuine methodology change now requires an explicit
+    --forcerun, same tradeoff already accepted for the z-score ancient()
+    fix from 65054fe1. Applied to every processor, not just process-all,
+    since the underlying risk (a routine edit to any rule's workflow file)
+    isn't specific to any one tool.
+    """
+    snakemake_cmd.extend(["--rerun-triggers", "mtime"])
+
+
 def add_forcerun_args(snakemake_cmd: List[str], force_rules: Optional[List[str]]) -> None:
     """Append --forcerun <rule> for each rule in force_rules, in place.
 

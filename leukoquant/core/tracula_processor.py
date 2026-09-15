@@ -31,7 +31,7 @@ from leukoquant.utils.bind_utils import (
     dir_level_bind_file_lists,
     consolidate_bind_entries,
 )
-from leukoquant.utils.snakemake_utils import add_forcerun_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
 
 logger = logging.getLogger(__name__)
 
@@ -479,7 +479,6 @@ class TraculaProcessor:
             "--cores", str(cores),
             "--jobs", "unlimited",
             "--drop-metadata",
-            "--immediate-submit", "--notemp",
             # Some compute nodes mount NFS lazily; the default 5 s wait is too
             # short for cold mounts and yields spurious "missing input" errors.
             "--latency-wait", "60",
@@ -489,12 +488,21 @@ class TraculaProcessor:
         ]
 
         if scheduler == "sge":
+            # --immediate-submit/--notemp only make sense (and only work)
+            # under an actual submission executor -- without --executor sge,
+            # Snakemake has no way to run the rules it's told to treat as
+            # already-submitted, and fails with "local rules cannot run when
+            # --immediate-submit is specified" (confirmed 2026-08-25: this
+            # was previously unconditional, breaking --scheduler local
+            # entirely). Matches zscore_processor.py's already-correct gating.
             snakemake_cmd.extend([
+                "--immediate-submit", "--notemp",
                 "--max-jobs-per-timespan", "75000/1s",
                 "--executor", "sge",
             ])
 
         add_forcerun_args(snakemake_cmd, force_rules)
+        add_rerun_triggers_args(snakemake_cmd)
         # Explicitly target tracula's own `rule all` so that imported module
         # rules (recon_all_all from the recon-all module) don't become the
         # default target when the module is activated.
