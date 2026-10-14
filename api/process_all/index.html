@@ -1357,10 +1357,10 @@ It can be explicitly suppressed with <code>--skip-zscore</code>.</p>
 <tr>
 <td><code>--force</code></td>
 <td>-</td>
-<td>flag</td>
-<td><code>False</code></td>
+<td>[STAGES]</td>
+<td>-</td>
 <td>No</td>
-<td>Force-rerun metrics extraction (for <code>--parcellation</code>) even if outputs already exist. Anything upstream that's already up to date (recon-all, GIF, BaMoS, DTI, NODDI, TRACULA) is left untouched.</td>
+<td>Force-rerun stages even if their outputs already exist. Bare <code>--force</code> reruns metrics (for <code>--parcellation</code>). <code>--force STAGES</code> takes a comma-separated list of <code>recon</code>, <code>gif</code>, <code>bamos</code>, <code>atlas</code>, <code>tracula</code>, <code>dti</code>, <code>noddi</code>, <code>tractqc</code>, <code>zscore</code>, <code>metrics</code> (e.g. <code>--force zscore,metrics</code>). Everything downstream of a forced stage reruns too (<code>--force zscore</code> also recomputes metrics); stages upstream that are already up to date are left untouched. An unknown stage name is an error.</td>
 </tr>
 <tr>
 <td><code>--verbose</code></td>
