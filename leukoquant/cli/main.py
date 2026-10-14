@@ -266,14 +266,25 @@ def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], 
                    'the GIF output atlas converted to FreeSurfer label space.')
 @click.option('--config-yaml', required=False, type=click.Path(exists=True),
               help='Optional YAML config for process-all inputs (CLI options override config values)')
-@click.option('--force', is_flag=True, default=False,
-              help='Force-rerun metrics extraction (for the given --parcellation) even if '
-                   'outputs already exist. Anything upstream that is already up to date '
-                   '(recon-all, GIF, BaMoS, DTI, NODDI, TRACULA) is left untouched.')
+# No explicit default=: with one, click 8.3 stops treating the value as
+# optional (bare --force errors, and --force --verbose swallows --verbose
+# as the stage list). Unset, it defaults to None. test_process_all_force.py
+# covers both cases.
+@click.option('--force', is_flag=False, flag_value='metrics', type=str,
+              metavar='[STAGES]',
+              help='Force-rerun stages even if their outputs already exist. Bare --force '
+                   'reruns metrics (for the given --parcellation); --force STAGES takes a '
+                   'comma-separated list of: recon, gif, bamos, atlas, tracula, dti, noddi, '
+                   'tractqc, zscore, metrics (e.g. --force zscore,metrics). Everything '
+                   'downstream of a forced stage reruns too (e.g. --force zscore also '
+                   'recomputes metrics); stages upstream that are up to date are untouched.')
 @click.option('--gpu', is_flag=True, default=False,
               help='Use CUDA-accelerated NiftyReg for registration steps across the pipeline (requires an '
                    'NVIDIA GPU + driver on the execution node). Downloads the CUDA NiftyReg build on first '
                    'use. Default: CPU-only.')
+@click.option('--retry-input-failures', is_flag=True, default=False,
+              help='Retry subjects that previously failed input checks (e.g. invalid DWI / missing directions). '
+                   'Default: skip sessions that already have an input_checks/dwi_failed.txt marker.')
 def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, flair: Optional[str] = None,
                     dwi: Optional[str] = None, output_dir: Optional[str] = None, bvecs: str = "",
                     bvals: str = "", mask: Optional[str] = None, verbose: bool = False,
@@ -281,11 +292,13 @@ def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, fla
                     healthy_subjects: Optional[str] = None, demographics_csv: Optional[str] = None,
                     covariates: Optional[str] = None, poly_terms: Optional[str] = None,
                     parcellation: str = 'freesurfer', config_yaml: Optional[str] = None,
-                    force: bool = False, gpu: bool = False) -> dict:
+                    force: Optional[str] = None, gpu: bool = False,
+                    retry_input_failures: bool = False) -> dict:
     """Run full pipeline: recon-all, bamos, gif, tracula, dti, noddi, metrics."""
     check_sge_plugin(scheduler or "local")
     return _exit_on_failure(process_all(subject, t1, flair, dwi, bvecs, bvals, output_dir, mask, verbose, scheduler, cores, skip_zscore,
-                       healthy_subjects, demographics_csv, covariates, poly_terms, parcellation, force, config_yaml, gpu))
+                       healthy_subjects, demographics_csv, covariates, poly_terms, parcellation, force, config_yaml, gpu,
+                       retry_input_failures))
 
 @main.command('process-atlas-conversion')
 @click.option('--subject', '-i', required=False,

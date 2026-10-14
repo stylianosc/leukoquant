@@ -294,7 +294,13 @@ for _parc in PARCELLATIONS:
         container:
             CONTAINER_SIF,
         resources:
-            mem_mb=20*1024,
+            # Measured on real EPAD sessions: the whole job peaks at about 2.1 GB
+            # of virtual memory (SGE maxvmem; per-stage RSS 2.1 GB for -prep, 1.5 GB
+            # for -path, 0.3 GB for bedpostx), including sessions that needed the
+            # tract-recovery retry. 8 GB keeps about 4x headroom, since SGE limits
+            # virtual memory and other datasets may differ. Raise it if a session
+            # is killed for memory (each stage logs "[mem] Peak RSS (...)").
+            mem_mb=8*1024,
             time="168:00:00",
             scratch_size=3*1024,
             name=f"tracula_{_parc}",
@@ -435,9 +441,14 @@ for _parc in PARCELLATIONS:
                     bvals_arg="--bvals ${{bvals_list[$i]}}"
                 fi
 
+                # --session-dir is the session's permanent output folder (the
+                # parent of tracula-<parcellation>), NOT node scratch: an
+                # unusable DWI leaves input_checks/dwi_failed.txt there so
+                # process-all skips the session on later runs.
                 python /leukoquant/leukoquant/utils/dwi_utils.py \
                     --dwi "$dwi_file" $bvecs_arg $bvals_arg \
-                    --outdir "$scan_outdir"
+                    --outdir "$scan_outdir" \
+                    --session-dir "$(dirname "{params.tool_dir_sing}")"
 
                 cp "$scan_outdir/data.nii.gz" "$dwi_output_directory/data_${{i}}.nii.gz"
                 cp "$scan_outdir/bvecs"       "$dwi_output_directory/bvecs_${{i}}"
@@ -590,7 +601,8 @@ for _parc in PARCELLATIONS:
             --doeddy 2 \
             --dob0 0 \
             --dmrirc-out "$dmrirc_path" \
-            --is-shelled-flag-file "$is_shelled_flag_file"
+            --is-shelled-flag-file "$is_shelled_flag_file" \
+            --aseg "$recon_scratch_dir/{params.subject}/mri/aparc+aseg.mgz"
     
             trac_preproc_file="/usr/local/freesurfer/bin/trac-preproc"
             bedpostx_mgh_file="/usr/local/freesurfer/bin/bedpostx_mgh"
@@ -649,14 +661,69 @@ for _parc in PARCELLATIONS:
 
             debug_dir="$tool_dir/debug"
 
+            # A DWI field of view that cuts off part of the anatomy a tract runs
+            # through (typically the lower brainstem, for the corticospinal
+            # tracts) makes dmri_train fail to fit control points for it
+            # ("Could not find satisfactory control point fit"). That happens
+            # in the Priors step of -prep, hours in but before the long
+            # bedpostx stage, and left alone it loses every tract and the
+            # preprocessed DWI that DTI/NODDI/z-score/metrics read. On that
+            # specific failure only: find the tract that failed from the log,
+            # rerun the stage without it, and repeat if another tract fails (at
+            # most 3 tracts; never the same one twice). The restriction stays
+            # in the dmrirc so later stages use it; metrics use the atlas for
+            # any tract TRACULA did not produce. The names of the dropped tracts
+            # are kept in excluded_tracts so their (partial) output folders can
+            # be removed after -path, otherwise a dropped tract would look like
+            # a reconstructed one downstream.
+            excluded_tracts=""
+            run_trac_stage_with_tract_recovery() {{
+                local label="$1" stage_flag="$2" attempt=0 stage_status=0 failed_tract
+                run_with_peak_mem "trac-all $label" trac-all -c $dmrirc_path -no-isrunning $stage_flag || stage_status=$?
+                while [ "$stage_status" -ne 0 ]; do
+                    if [ "$attempt" -ge 3 ] || ! grep -q "Could not find satisfactory control point fit" "{params.log_file}"; then
+                        exit "$stage_status"
+                    fi
+                    failed_tract=$(python /leukoquant/leukoquant/utils/tracula_utils.py failing-tract "{params.log_file}") || failed_tract=""
+                    if [ -z "$failed_tract" ]; then
+                        exit "$stage_status"
+                    fi
+                    echo "WARNING: control point fit failed for tract $failed_tract (DWI field of view likely cuts off part of it); rerunning $stage_flag without it."
+                    python /leukoquant/leukoquant/utils/tracula_utils.py exclude-tracts "$dmrirc_path" /usr/local/freesurfer/trctrain/hcp/pathlist.txt "$failed_tract" || exit "$stage_status"
+                    excluded_tracts="$excluded_tracts $failed_tract"
+                    attempt=$((attempt + 1))
+                    stage_status=0
+                    run_with_peak_mem "trac-all $label (without failed tracts, attempt $attempt)" trac-all -c $dmrirc_path -no-isrunning $stage_flag || stage_status=$?
+                done
+            }}
+
             echo "Running trac-all -prep"
-            trac-all -c $dmrirc_path -no-isrunning -prep
+            run_trac_stage_with_tract_recovery "prep" -prep
 
             echo "Running trac-all -bedp"
-            trac-all -c $dmrirc_path -no-isrunning -bedp
+            run_with_peak_mem "trac-all bedp" trac-all -c $dmrirc_path -no-isrunning -bedp
 
             echo "Running trac-all -path"
-            trac-all -c $dmrirc_path -no-isrunning -path
+            run_trac_stage_with_tract_recovery "path" -path
+
+            # Tracula outputs to $scratch_path/{params.subject}/
+            tracula_subject_dir="$scratch_path/{params.subject}/"
+
+            # Drop the output folder of any tract excluded during recovery, so
+            # only tracts TRACULA really reconstructed are kept.
+            for dropped_tract in $excluded_tracts; do
+                rm -rf "$tracula_subject_dir/dpath/${{dropped_tract}}_avg16_syn_bbr"
+            done
+
+            # Check reconstructed tracts against expected count (42). Count tract
+            # folders holding a path distribution, not every *avg16* entry: that
+            # glob also matches the merged volume and would hide a missing tract.
+            reconstructed_count=$(ls "$tracula_subject_dir/dpath/"*avg16*/path.pd.nii.gz 2>/dev/null | wc -l | tr -d ' ')
+            echo "TRACULA reconstructed $reconstructed_count of 42 tracts."
+            if [ -n "$reconstructed_count" ] && [ "$reconstructed_count" -lt 42 ]; then
+                echo "WARNING: $reconstructed_count/42 tracts were reconstructed by TRACULA."
+                echo "         Omitted tracts (often brainstem: CST, MCP) will use tract atlas fallback downstream."
+            fi
 
             echo "Copying results to outputs directory..."
             # Copy only the files we actually use to save disk space and inode count

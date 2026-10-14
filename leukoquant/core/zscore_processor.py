@@ -23,7 +23,7 @@ from leukoquant.utils.container_utils import (
     FREESURFER_SIF_HF_PATH,
 )
 from leukoquant.utils.external_utils import check_sge_plugin
-from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy, write_run_config
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +487,9 @@ class ZScoreProcessor:
             "container_name":        "freesurfer_unified_container",
             "conda_env_name":        "z_scores_env",
             "use_gpu":               use_gpu,
+            # --force: recompute existing z-score maps rather than skipping
+            # them (see "force" in z_score_workflow.smk).
+            "force":                 "z_score" in (force_rules or []),
         }
         if dwi_pattern:
             config_dict["dwi_pattern"] = dwi_pattern
@@ -499,8 +502,11 @@ class ZScoreProcessor:
         if task_concurrency is not None:
             config_dict["task_concurrency"] = int(task_concurrency)
 
-        with open(config_file, "w") as f:
-            yaml.safe_dump(config_dict, f, sort_keys=False)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+
+        # the record of the latest run (see write_run_config).
+
+        config_file = write_run_config(config_file, config_dict)
 
         # ------------------------------------------------------------------
         # Build Snakemake command with auto-generated singularity bind args

@@ -16,7 +16,7 @@ import os
 from typing import Dict, List, Optional, Tuple
 
 from leukoquant.utils.subject_utils import read_subjects
-from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy, write_run_config
 from leukoquant.utils.container_utils import (
     ensure_container,
     FREESURFER_SIF_FILENAME,
@@ -347,8 +347,11 @@ class MetricsProcessor:
                 resolved_metrics[metric_name] = _resolve_pattern_spec(metric_spec)
             config_dict["metrics"] = resolved_metrics
 
-        with open(config_file, "w") as f:
-            yaml.dump(config_dict, f, default_flow_style=False)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+
+        # the record of the latest run (see write_run_config).
+
+        config_file = write_run_config(config_file, config_dict)
 
         #logger.info(f"Config written to {config_file}")
 

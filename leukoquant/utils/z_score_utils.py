@@ -117,6 +117,70 @@ def translate_path(path: str, bind_map: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Per-job memory sizing (used at Snakemake workflow parse time)
+# ---------------------------------------------------------------------------
+
+# The GLM merges every healthy subject's registered volume into one 4D
+# array before regressing, so its real memory need scales with
+# num_healthy * (voxels per registered volume) for any dataset, not a fixed
+# per-dataset constant. Applied uniformly, calibrated or not, so there is
+# one formula rather than a per-dataset special case.
+# Measured GLM peaks run ~1.13x the raw estimate below, and a scheduler's
+# virtual-memory limit (e.g. SGE h_vmem) also counts address space beyond the
+# resident peak, so the margin over the raw estimate has to cover both; 1.15
+# left jobs at up to 95% of their limit and failed on the largest images.
+ZSCORE_MEM_HEADROOM = 1.25
+_ZSCORE_MEM_BYTES_PER_VOXEL = 4      # float32
+_ZSCORE_MEM_WORKING_COPIES = 4       # input array, design matrix, residuals, beta/output
+_ZSCORE_MEM_BASE_OVERHEAD_MB = 2048  # container + interpreter + non-GLM steps
+
+
+def compute_zscore_mem_mb(num_healthy: int, target_t1_paths=None) -> int:
+    """Return the per-job memory budget (MB) for the z-score rule.
+
+    A first-principles physical estimate from *num_healthy* and the voxel
+    count of the target T1 grid (the space every healthy volume gets
+    resampled into before merging) -- float32 array size times a handful of
+    working copies (input array, design matrix, residuals, beta/output) --
+    not a per-dataset guess or anything read from prior run logs.
+
+    All z-score jobs of one run share one memory request, so it is sized for
+    the LARGEST grid among *target_t1_paths* (a path or a list of paths):
+    grids differ within a dataset, and one sized from a typical image runs
+    the largest out of memory. Only NIfTI headers are read, never image data.
+    Rounds up to the nearest 2G; never crashes DAG construction on a
+    missing/unreadable path.
+    """
+    import math
+    import os
+
+    if isinstance(target_t1_paths, str):
+        target_t1_paths = [target_t1_paths]
+    n_voxels = None
+    for path in target_t1_paths or []:
+        if not (path and os.path.isfile(path)):
+            continue
+        try:
+            import nibabel as nib
+            shape = nib.load(path).header.get_data_shape()[:3]
+            n_voxels = max(n_voxels or 0, shape[0] * shape[1] * shape[2])
+        except Exception:
+            continue
+    if not n_voxels:
+        n_voxels = 256 * 256 * 256  # generic fallback grid if no sample image is resolvable
+
+    raw_bytes = (
+        _ZSCORE_MEM_BASE_OVERHEAD_MB * 1024 * 1024
+        + (num_healthy + 1) * n_voxels * _ZSCORE_MEM_BYTES_PER_VOXEL
+          * _ZSCORE_MEM_WORKING_COPIES
+    )
+    raw_mb = (raw_bytes / (1024 * 1024)) * ZSCORE_MEM_HEADROOM
+
+    mem_mb = math.ceil(raw_mb / 2048) * 2048  # round UP to the nearest 2G
+    return min(mem_mb, 32 * 1024)
+
+
+# ---------------------------------------------------------------------------
 # Design-matrix builder (heavy deps imported lazily)
 # ---------------------------------------------------------------------------
 

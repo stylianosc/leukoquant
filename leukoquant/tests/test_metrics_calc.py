@@ -124,6 +124,32 @@ class TestSummaryNonzero:
         assert result["mean"] == 2.5
         assert result["sum"] == 10.0
 
+    def test_shape_stats_match_scipy(self):
+        """Skewness and excess kurtosis equal scipy's defaults (bias=True, fisher=True) on the non-zero values."""
+        scipy_stats = pytest.importorskip("scipy.stats")
+        rng = np.random.default_rng(0)
+        values = rng.gamma(2.0, 0.3, size=500)          # right-skewed, heavy-tailed
+        arr = np.concatenate([values, np.zeros(100)])   # zeros are excluded, as for every statistic
+        result = _summary_nonzero(arr)
+        assert result["skew"] == pytest.approx(scipy_stats.skew(values), rel=1e-9)
+        assert result["kurtosis"] == pytest.approx(scipy_stats.kurtosis(values), rel=1e-9)
+        assert result["skew"] > 0
+
+    def test_shape_stats_float32_input(self):
+        """A float32 map gives the float64 moments (no precision loss in the third and fourth powers)."""
+        scipy_stats = pytest.importorskip("scipy.stats")
+        values = np.random.default_rng(1).normal(0.7, 0.05, size=2000).astype(np.float32)
+        result = _summary_nonzero(values)
+        assert result["skew"] == pytest.approx(scipy_stats.skew(values.astype(np.float64)), rel=1e-9)
+        assert result["kurtosis"] == pytest.approx(scipy_stats.kurtosis(values.astype(np.float64)), rel=1e-9)
+
+    def test_shape_stats_without_spread_are_zero(self):
+        """Empty, single-value and constant regions have no shape: 0.0, never NaN."""
+        for arr in (np.zeros(5), np.array([0.0, 5.0]), np.full(10, 0.3)):
+            result = _summary_nonzero(arr)
+            assert result["skew"] == 0.0
+            assert result["kurtosis"] == 0.0
+
 
 class TestSummaryChangeNonzero:
     """Test _summary_change_nonzero function."""
@@ -149,6 +175,14 @@ class TestSummaryChangeNonzero:
         # Should contain change statistics
         assert isinstance(result, dict)
         assert len(result) > 0
+
+    def test_no_change_ratio_of_shape_stats(self):
+        """Skewness and kurtosis can be negative, so they get no (a - b) / (a + b) change metric."""
+        lesion_map = np.array([1.0, 1.0, 1.0, 0.0, 0.0, 0.0])
+        values = np.array([1.0, 2.0, 9.0, 4.0, 5.0, 4.5])
+        result = _summary_change_nonzero(lesion_map, values)
+        assert "mean_change" in result and "peak_width_change_absolute" in result
+        assert not any(k.startswith(("skew", "kurtosis")) for k in result)
 
 
 class TestParseLesionSpec:
@@ -371,3 +405,65 @@ class TestComputeWholeBrainLesionMicrostructureMetrics:
         assert len(df) == 1
         assert df.iloc[0]["subject"] == "sub-01"
         assert list(df.columns) == ["subject"]
+
+
+class TestTractBinaryDilatedLesionStatistics:
+    """The binary-tract x dilated-lesion statistics summarise the map, not the map squared.
+
+    Until this fix both the fast and the legacy implementations multiplied the map in twice, so
+    {map}_{lesion}_map_tract_binary_dilated_lesion_* held statistics of map**2. With a constant map of 2.0
+    the mean over the region must be 2.0 (it was 4.0), the same value as the other lesion regions.
+    """
+
+    @staticmethod
+    def _inputs():
+        shape = (6, 6, 6)
+        tract = np.zeros(shape)
+        tract[1:5, 1:5, 1:5] = 1.0
+        lesion = np.zeros(shape)
+        lesion[2:4, 2:4, 2:4] = 1.0
+        binary = (lesion > 0).astype(np.uint8)
+        dilated = np.zeros(shape, dtype=np.uint8)
+        dilated[1:5, 1:5, 1:5] = 1
+        penumbra = (dilated - binary).astype(np.uint8)
+        return dict(
+            subject="sub-01",
+            tract_arrays={"lh.cst": tract},
+            tract_binary_arrays={"lh.cst": (tract > 0).astype(np.uint8)},
+            tract_skeletons_arrays={"lh.cst": np.zeros(shape, dtype=np.uint8)},
+            tract_source={"lh.cst": "tractography"},
+            lesion_arrays={"wmh": lesion},
+            binary_lesion_arrays={"wmh": binary},
+            dilated_lesion_arrays={"wmh": dilated},
+            penumbras_arrays={"wmh": penumbra},
+            map_arrays={"fa": np.full(shape, 2.0)},
+            voxel_vol=1.0,
+            voxel_sizes=(1.0, 1.0, 1.0),
+        )
+
+    def test_fast_path_summarises_the_map(self):
+        from leukoquant.utils.metrics_calc import _compute_tract_level_metrics_fast
+        df = _compute_tract_level_metrics_fast(**self._inputs())
+        row = df.iloc[0]
+        assert row["fa_wmh_map_tract_binary_dilated_lesion_mean"] == pytest.approx(2.0)
+        assert row["fa_wmh_map_tract_binary_dilated_lesion_max"] == pytest.approx(2.0)
+        assert row["fa_wmh_map_tract_binary_dilated_lesion_mean"] == pytest.approx(
+            row["fa_wmh_map_tract_binary_penumbra_mean"])
+
+    def test_legacy_path_matches_fast_path(self):
+        """The dense (legacy) loop gives the same corrected value as the fast path."""
+        import types
+        import nibabel as nib
+        from leukoquant.utils.metrics_calc import _compute_tract_level_metrics_fast, _compute_tract_level_metrics_legacy
+        kw = self._inputs()
+        fast = _compute_tract_level_metrics_fast(**kw).iloc[0]
+        inputs = types.SimpleNamespace(
+            subject=kw["subject"], tract_arrays=kw["tract_arrays"], tract_binary_arrays=kw["tract_binary_arrays"],
+            tract_skeletons_arrays=kw["tract_skeletons_arrays"], tract_source=kw["tract_source"],
+            lesion_arrays=kw["lesion_arrays"], binary_lesion_arrays=kw["binary_lesion_arrays"],
+            dilated_lesion_arrays=kw["dilated_lesion_arrays"], penumbras_arrays=kw["penumbras_arrays"],
+            map_arrays=kw["map_arrays"], voxel_vol=kw["voxel_vol"],
+            ref_img=nib.Nifti1Image(np.zeros((6, 6, 6)), np.eye(4)))
+        legacy = _compute_tract_level_metrics_legacy(types.SimpleNamespace(subject=kw["subject"]), inputs).iloc[0]
+        assert legacy["fa_wmh_map_tract_binary_dilated_lesion_mean"] == pytest.approx(
+            fast["fa_wmh_map_tract_binary_dilated_lesion_mean"])

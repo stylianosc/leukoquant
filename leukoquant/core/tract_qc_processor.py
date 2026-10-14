@@ -19,7 +19,7 @@ from leukoquant.utils.container_utils import (
     MINICONDA_SIF_FILENAME,
     MINICONDA_SIF_HF_PATH,
 )
-from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy, write_run_config
 
 logger = logging.getLogger(__name__)
 
@@ -110,8 +110,11 @@ class TractQCProcessor:
         if subjects_file:
             config_dict["subjects_file"] = subjects_file
 
-        with open(config_file, "w") as f:
-            yaml.safe_dump(config_dict, f)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+
+        # the record of the latest run (see write_run_config).
+
+        config_file = write_run_config(config_file, config_dict)
 
         # Build Snakemake command with singularity binds
         bind_str = ",".join(f"{host}:{container}" for host, container in bind_pairs)

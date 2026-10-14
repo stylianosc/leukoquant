@@ -15,9 +15,88 @@ import argparse
 import glob
 import os
 from pathlib import Path
+from typing import Any, Dict, List, Optional, Union
 import warnings
 import numpy as np
 import pandas as pd
+
+# The 42 canonical tract directories reconstructed by FreeSurfer TRACULA 7.x
+TRACULA_42_TRACTS = [
+    "acomm_avg16_syn_bbr",
+    "cc.bodyc_avg16_syn_bbr",
+    "cc.bodyp_avg16_syn_bbr",
+    "cc.bodypf_avg16_syn_bbr",
+    "cc.bodypm_avg16_syn_bbr",
+    "cc.bodyt_avg16_syn_bbr",
+    "cc.genu_avg16_syn_bbr",
+    "cc.rostrum_avg16_syn_bbr",
+    "cc.splenium_avg16_syn_bbr",
+    "lh.af_avg16_syn_bbr",
+    "lh.ar_avg16_syn_bbr",
+    "lh.atr_avg16_syn_bbr",
+    "lh.cbd_avg16_syn_bbr",
+    "lh.cbv_avg16_syn_bbr",
+    "lh.cst_avg16_syn_bbr",
+    "lh.emc_avg16_syn_bbr",
+    "lh.fat_avg16_syn_bbr",
+    "lh.fx_avg16_syn_bbr",
+    "lh.ilf_avg16_syn_bbr",
+    "lh.mlf_avg16_syn_bbr",
+    "lh.or_avg16_syn_bbr",
+    "lh.slf1_avg16_syn_bbr",
+    "lh.slf2_avg16_syn_bbr",
+    "lh.slf3_avg16_syn_bbr",
+    "lh.uf_avg16_syn_bbr",
+    "mcp_avg16_syn_bbr",
+    "rh.af_avg16_syn_bbr",
+    "rh.ar_avg16_syn_bbr",
+    "rh.atr_avg16_syn_bbr",
+    "rh.cbd_avg16_syn_bbr",
+    "rh.cbv_avg16_syn_bbr",
+    "rh.cst_avg16_syn_bbr",
+    "rh.emc_avg16_syn_bbr",
+    "rh.fat_avg16_syn_bbr",
+    "rh.fx_avg16_syn_bbr",
+    "rh.ilf_avg16_syn_bbr",
+    "rh.mlf_avg16_syn_bbr",
+    "rh.or_avg16_syn_bbr",
+    "rh.slf1_avg16_syn_bbr",
+    "rh.slf2_avg16_syn_bbr",
+    "rh.slf3_avg16_syn_bbr",
+    "rh.uf_avg16_syn_bbr",
+]
+
+
+def parse_expected_tracts(expected_tracts: Optional[Union[str, List[str]]]) -> List[str]:
+    """Parse expected tracts argument into a list of expected tract directory / base names."""
+    if not expected_tracts:
+        return []
+    if isinstance(expected_tracts, list):
+        return expected_tracts
+    if isinstance(expected_tracts, str):
+        token = expected_tracts.strip()
+        if token.lower() in ("tracula", "tracula42", "tracula_42"):
+            return list(TRACULA_42_TRACTS)
+        p = Path(token)
+        if p.exists() and p.is_dir():
+            names = []
+            for f in sorted(p.iterdir()):
+                if f.name.startswith("."):
+                    continue
+                name = f.name
+                for ext in (".display.trk", "_in_subject.trk", ".trk", ".nii.gz", ".nii"):
+                    if name.endswith(ext):
+                        name = name[:-len(ext)]
+                        break
+                if name and name not in names:
+                    names.append(name)
+            return names
+        if p.exists() and p.is_file():
+            lines = p.read_text().splitlines()
+            return [line.strip() for line in lines if line.strip() and not line.startswith("#")]
+        return [t.strip() for t in token.split(",") if t.strip()]
+    return []
+
 
 try:
     from dipy.io.streamline import load_tractogram
@@ -176,14 +255,58 @@ def qc_tract_file(tract_file: str) -> dict:
         qc_result["qc_pass"] = False
     return qc_result
 
-from typing import Optional
-
-def run_tract_qc(subject: str, tractography_path: str, output_path: Optional[str] = None, skip_subject_dir: bool = False):
+def run_tract_qc(
+    subject: str,
+    tractography_path: str,
+    output_path: Optional[str] = None,
+    skip_subject_dir: bool = False,
+    expected_tracts: Optional[Union[str, List[str]]] = None,
+):
     tract_files, tract_names, exists = find_tract_files(subject, tractography_path, skip_subject_dir=skip_subject_dir)
     print(f"[tract_qc] run_tract_qc: {len(tract_files)} tract file(s) found for subject {subject!r}")
     for f in tract_files:
         print(f"[tract_qc]   -> {f}")
     qc_results = [qc_tract_file(f) for f in tract_files]
+    for res, tname in zip(qc_results, tract_names):
+        res["tract_name"] = tname
+
+    # Check for expected tracts that were not reconstructed / found
+    expected_list = parse_expected_tracts(expected_tracts)
+    if expected_list:
+        found_raw = set(tract_names)
+        found_base = {n.split("_avg16", 1)[0] for n in tract_names}
+        for f in tract_files:
+            stem = Path(f).name.split(".", 1)[0]
+            found_raw.add(stem)
+            found_base.add(stem.split("_avg16", 1)[0])
+
+        for exp in expected_list:
+            exp_base = exp.split("_avg16", 1)[0]
+            if exp not in found_raw and exp_base not in found_base:
+                print(f"[tract_qc] Missing expected tract: {exp}")
+                qc_results.append({
+                    "file": f"missing/{exp}/path.pd.trk",
+                    "exists": False,
+                    "size": 0,
+                    "qc_pass": False,
+                    "reason": "Missing from tractography (low coverage/unreconstructed)",
+                    "streamline_length_std": None,
+                    "volume_median_streamline_length_ratio": None,
+                    "tract_name": exp,
+                })
+
+    if not qc_results:
+        qc_results.append({
+            "file": "",
+            "exists": False,
+            "size": 0,
+            "qc_pass": False,
+            "reason": "Tractography file not found",
+            "streamline_length_std": None,
+            "volume_median_streamline_length_ratio": None,
+            "tract_name": "",
+        })
+
     report = {
         "subject": subject,
         "tractography_path": tractography_path,
@@ -214,7 +337,18 @@ def run_tract_qc(subject: str, tractography_path: str, output_path: Optional[str
     # leaves either the last fully-valid qc_report.csv or none at all, never
     # a truncated one a downstream consumer could read without erroring.
     df = pd.DataFrame(report["qc_results"])
-    from metrics_calc import write_csv
+    try:
+        from leukoquant.utils.metrics_calc import write_csv
+    except ImportError:
+        try:
+            from metrics_calc import write_csv  # type: ignore
+        except ImportError:
+            def write_csv(data_df: pd.DataFrame, target_path: str) -> None:
+                root, ext = os.path.splitext(target_path)
+                tmp = f"{root}_tmp{ext}"
+                data_df.to_csv(tmp, index=False)
+                os.replace(tmp, target_path)
+
     write_csv(df, output_csv)
     print(f"QC results written to {output_csv}")
 
@@ -225,8 +359,16 @@ def main():
     parser.add_argument('--output', required=False, help='Output directory or file for QC report (CSV). If not set, uses current directory.')
     parser.add_argument('--skip-subject-dir', action='store_true', default=False,
                         help='Do not append the subject ID to the tractography base path (use when base already contains the subject folder).')
+    parser.add_argument('--expected-tracts', required=False, default=None,
+                        help='Expected tracts: "tracula", path to atlas directory/file, or comma-separated tract names.')
     args = parser.parse_args()
-    run_tract_qc(args.subject, args.tractography_path, args.output, skip_subject_dir=args.skip_subject_dir)
+    run_tract_qc(
+        args.subject,
+        args.tractography_path,
+        args.output,
+        skip_subject_dir=args.skip_subject_dir,
+        expected_tracts=args.expected_tracts,
+    )
 
 if __name__ == "__main__":
     main()

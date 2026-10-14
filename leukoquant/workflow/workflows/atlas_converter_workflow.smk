@@ -114,11 +114,14 @@ rule convert_atlas:
         echo "Date: $(date)"
         echo "Date: $(date)" >&2
 
+        enable_line_buffering
+        trap 'report_total_peak_mem' EXIT INT TERM
+
         export LC_NUMERIC="en_US.UTF-8"
         export PYTHONUNBUFFERED=1
 
         tmp_out="$(make_tmp_path "{params.output_singularity}")"
-        python /leukoquant/leukoquant/utils/atlas_converter.py \
+        run_with_peak_mem "atlas_conversion" python /leukoquant/leukoquant/utils/atlas_converter.py \
             --input-parcellation '{params.input_singularity}' \
             --mapping-file '{params.mapping_file_singularity}' \
             --output-path "$tmp_out" \

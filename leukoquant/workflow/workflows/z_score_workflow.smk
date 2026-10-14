@@ -17,7 +17,7 @@ LEUKOQUANT_PARENT_DIR = config.get("leukoquant_parent_dir")
 
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
 
-from leukoquant.utils.z_score_utils import get_t1_path, get_metric_path, get_dwi_path, get_bval_path, translate_path
+from leukoquant.utils.z_score_utils import get_t1_path, get_metric_path, get_dwi_path, get_bval_path, translate_path, compute_zscore_mem_mb
 from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_gpu, ensure_niftyreg_cuda_libs
 
 
@@ -255,16 +255,14 @@ ZSCORE_SCRATCH_MB = min(
     15 * 1024,
 )
 
-# Per-job memory (see the z_score rule's `resources:` below). fsl_glm
-# regresses across the full merged healthy-cohort 4D volume when covariates
-# are configured, so its real memory need does grow with num_healthy -- but
-# scaling the request up per-dataset (tried 2026-08-13, reverted) makes
-# larger-cohort datasets (EPAD, 72 healthy) request 32G+ jobs that sit
-# queued far longer on a busy shared cluster than a 16G request would.
-# Fixed at 16G for now (confirmed real OOM was at 12G) while the actual fix
-# -- bounding fsl_glm's memory independent of cohort size, e.g. chunked
-# GLM instead of one whole-volume call -- is investigated separately.
-ZSCORE_MEM_MB = 16 * 1024
+# Per-job memory (see the z_score rule's `resources:` below). Calculation
+# lives in z_score_utils.compute_zscore_mem_mb() -- kept out of this
+# workflow file since it's real logic with its own history, not simple
+# path/config wiring. A first-principles estimate from num_healthy and the
+# largest target T1 grid (the space every healthy volume gets resampled into
+# before merging; headers only, since every z-score job of this run shares
+# one memory request), not anything read from prior run logs.
+ZSCORE_MEM_MB = compute_zscore_mem_mb(num_healthy, list(_target_t1_map.values()))
 
 
 def _sif_target_t1(subject):
@@ -400,6 +398,11 @@ rule z_score:
         output_space        = OUTPUT_SPACE,
         skip_skullstrip_t1  = config.get("skip_skullstrip_t1", False),
         skip_skullstrip_dwi = config.get("skip_skullstrip_dwi", False),
+        # True when the user forced this rule (leukoquant --force). Forcing
+        # alone reruns the job but, with update() outputs, the script would
+        # still skip every map that already exists; this tells it to
+        # recompute them (see --force in z_score_calc.sh).
+        force               = bool(config.get("force", False)),
         calc_script_sif     = CALC_SCRIPT_SIF,
         target_t1_sif       = lambda wildcards: _sif_target_t1(wildcards.subject),
         demographics_sif    = _sif_demographics,
@@ -461,6 +464,8 @@ rule z_score:
         exec > '{params.log_file}'
         exec 2> '{params.error_file}'
         require_gpu_if_platf1 '{params.platf}'
+
+        enable_line_buffering
 
         # Point TMPDIR at per-job scratch (/scratch0), never the node's
         # local /tmp -- same pattern as tracula_workflow.smk. Without this,
@@ -535,5 +540,9 @@ rule z_score:
             CMD="$CMD --skip-skullstrip-dwi"
         fi
 
-        eval "$CMD"
+        if [ '{params.force}' = "True" ]; then
+            CMD="$CMD --force"
+        fi
+
+        run_with_peak_mem "z-score" bash -c "$CMD"
         """

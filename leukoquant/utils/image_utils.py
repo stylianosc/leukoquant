@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -44,9 +45,14 @@ def reorient_to_ras(input_path: str, output_path: str) -> None:
     data = np.asarray(img_ras.dataobj)
     has_negatives = bool(np.any(data < 0))
 
+    is_same = Path(input_path).resolve() == Path(output_path).resolve()
+
     if not needs_reorient and not has_negatives:
-        logger.info("Image already RAS+ with no negative voxels, copying as-is: %s", input_path)
-        shutil.copy2(str(input_path), str(output_path))
+        if not is_same:
+            logger.info("Image already RAS+ with no negative voxels, copying as-is: %s", input_path)
+            shutil.copy2(str(input_path), str(output_path))
+        else:
+            logger.info("Image already RAS+ with no negative voxels (in-place): %s", input_path)
         return
 
     if has_negatives:
@@ -55,7 +61,13 @@ def reorient_to_ras(input_path: str, output_path: str) -> None:
     else:
         img_out = img_ras
 
-    nib.save(img_out, str(output_path))
+    if is_same:
+        tmp_out = Path(output_path).parent / f".tmp_{os.getpid()}_{Path(output_path).name}"
+        nib.save(img_out, str(tmp_out))
+        os.replace(str(tmp_out), str(output_path))
+    else:
+        nib.save(img_out, str(output_path))
+
     logger.info(
         "Processed %s -> %s (reoriented=%s from %s, clipped_negatives=%s)",
         input_path,
@@ -93,14 +105,25 @@ def select_first_frame(input_path: str, output_path: str) -> None:
 
     img = nib.load(str(input_path))
 
+    is_same = Path(input_path).resolve() == Path(output_path).resolve()
+
     if img.ndim < 4 or img.shape[3] <= 1:
-        logger.info("Image is already single-volume, copying as-is: %s", input_path)
-        shutil.copy2(str(input_path), str(output_path))
+        if not is_same:
+            logger.info("Image is already single-volume, copying as-is: %s", input_path)
+            shutil.copy2(str(input_path), str(output_path))
+        else:
+            logger.info("Image is already single-volume (in-place): %s", input_path)
         return
 
     n_frames = img.shape[3]
     img_out = img.slicer[..., 0]
-    nib.save(img_out, str(output_path))
+    if is_same:
+        tmp_out = Path(output_path).parent / f".tmp_{os.getpid()}_{Path(output_path).name}"
+        nib.save(img_out, str(tmp_out))
+        os.replace(str(tmp_out), str(output_path))
+    else:
+        nib.save(img_out, str(output_path))
+
     logger.info(
         "Selected frame 0 of %d from %s -> %s",
         n_frames,

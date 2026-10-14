@@ -3,7 +3,11 @@
 import tempfile
 from pathlib import Path
 import pytest
-from leukoquant.utils.tract_qc_util import find_tract_files
+from leukoquant.utils.tract_qc_util import (
+    find_tract_files,
+    parse_expected_tracts,
+    run_tract_qc,
+)
 
 
 @pytest.fixture
@@ -73,3 +77,64 @@ class TestFindTractFiles:
 
         # Should handle empty glob gracefully
         assert isinstance(tract_files, list)
+
+
+class TestParseExpectedTracts:
+    """Test parse_expected_tracts function."""
+
+    def test_tracula_keyword(self):
+        tracts = parse_expected_tracts("tracula")
+        assert len(tracts) == 42
+        assert "lh.cst_avg16_syn_bbr" in tracts
+        assert "rh.cst_avg16_syn_bbr" in tracts
+        assert "mcp_avg16_syn_bbr" in tracts
+
+    def test_comma_separated(self):
+        tracts = parse_expected_tracts("lh.cst,rh.cst,mcp")
+        assert tracts == ["lh.cst", "rh.cst", "mcp"]
+
+    def test_directory(self, temp_dir):
+        (temp_dir / "lh.cst.display.trk").touch()
+        (temp_dir / "rh.cst.display.trk").touch()
+        tracts = parse_expected_tracts(str(temp_dir))
+        assert "lh.cst" in tracts
+        assert "rh.cst" in tracts
+
+    def test_empty(self):
+        assert parse_expected_tracts(None) == []
+        assert parse_expected_tracts("") == []
+
+
+class TestRunTractQcWithExpectedTracts:
+    """Test run_tract_qc flags missing expected tracts."""
+
+    def test_missing_tract_flagged_in_qc_report(self, temp_dir):
+        import pandas as pd
+
+        subject = "test_sub"
+        subj_dir = temp_dir / subject / "dpath"
+        # Only reconstruct acomm
+        acomm_dir = subj_dir / "acomm_avg16_syn_bbr"
+        acomm_dir.mkdir(parents=True)
+        (acomm_dir / "path.pd.trk").touch()
+
+        output_csv = temp_dir / "qc_report.csv"
+        # Expect both acomm and lh.cst
+        run_tract_qc(
+            subject=subject,
+            tractography_path=f"{temp_dir}:{subject}/dpath/*/path.pd.trk",
+            output_path=str(output_csv),
+            skip_subject_dir=True,
+            expected_tracts=["acomm_avg16_syn_bbr", "lh.cst_avg16_syn_bbr"],
+        )
+
+        assert output_csv.exists()
+        df = pd.read_csv(output_csv)
+        assert len(df) == 2
+        
+        # Check lh.cst is marked as missing / failed QC
+        cst_row = df[df["tract_name"].str.contains("lh.cst")].iloc[0]
+        assert cst_row["exists"] == False
+        assert cst_row["qc_pass"] == False
+        assert "Missing from tractography" in cst_row["reason"]
+

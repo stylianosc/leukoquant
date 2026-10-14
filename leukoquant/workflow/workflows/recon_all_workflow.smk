@@ -141,7 +141,7 @@ rule recon_all:
             --op first_frame \
             --verbose
 
-        recon-all -i "$t1_singleframe" -s "$recon_name" -sd "$scratch_sd" -all
+        run_with_peak_mem "recon-all" recon-all -i "$t1_singleframe" -s "$recon_name" -sd "$scratch_sd" -all
 
         # Copy the whitelist files from scratch to NFS.
         # -L dereferences the full symlink chain at the kernel level (handles
@@ -228,6 +228,7 @@ rule thalamic_seg:
         echo "Date: $(date)"
         echo "Date: $(date)" >&2
         enable_line_buffering
+        trap 'report_total_peak_mem' EXIT INT TERM
 
         export FS_LICENSE=/license/license.txt
         export SUBJECTS_DIR="{params.recon_sd}"
@@ -247,5 +248,5 @@ rule thalamic_seg:
         rm -f "{params.recon_sd}/{params.recon_subject_name}/scripts/IsRunningThalamicNuclei_mainFreeSurferT1"
 
         echo "Starting thalamic segmentation for subject {wildcards.subject}"
-        segmentThalamicNuclei.sh {params.recon_subject_name} {params.recon_sd}
+        run_with_peak_mem "thalamic_seg" segmentThalamicNuclei.sh {params.recon_subject_name} {params.recon_sd}
         """

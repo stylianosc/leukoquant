@@ -10,6 +10,8 @@ import argparse
 import sys
 import os
 import subprocess
+import functools
+import shlex
 from pathlib import Path
 from dipy.io.streamline import load_tractogram, save_tractogram
 from dipy.tracking import utils
@@ -32,6 +34,9 @@ os.environ["LD_LIBRARY_PATH"] = (
     os.environ.get("LD_LIBRARY_PATH", "")
     + ":/leukoquant/leukoquant/external/niftyreg/gpu/lib"
 )
+
+
+CLAMP_MARGIN_VOX = 0.01  # voxels kept below the field-of-view edge when clamping stray streamline points
 
 
 def _make_sft_safe(streamlines, reference, space, source_label=""):
@@ -60,10 +65,14 @@ def _make_sft_safe(streamlines, reference, space, source_label=""):
     # `dims` (or even `dims - 1e-6`) in center-origin space is therefore still
     # `> dims` once shifted to corner-origin for the check, and the file we
     # just "fixed" fails to save with the exact same bbox error. The true
-    # ceiling in center-origin space is dims - 0.5; np.nextafter in float32
-    # then trims a hair further so the value also survives the float32
-    # downcast when written to the .trk file.
-    upper = np.nextafter((dims - 0.5).astype(np.float32), np.float32(0)).astype(np.float64)
+    # ceiling in center-origin space is dims - 0.5. One float32 step below it
+    # (the earlier choice) is not enough: on flipped or oblique grids with few
+    # slices (EPAD's FA grid has 60) the affine round trip of the saved float32
+    # .trk moves a point by more than that, a clamped point lands at 59.5000x,
+    # dipy's density_map adds 0.5, gets 60.0 and indexes slice 60 of 60
+    # ("index 60 is out of bounds for axis 2 with size 60"). A margin of
+    # CLAMP_MARGIN_VOX under the ceiling absorbs that.
+    upper = dims - 0.5 - CLAMP_MARGIN_VOX
 
     n_clamped = 0
     clamped = []
@@ -90,6 +99,21 @@ def get_transformed_tractogram(input_path, matrix, out_reference_path):
     return _make_sft_safe(transformed_points, out_reference_path, Space.RASMM, input_path)
 
 
+@functools.lru_cache(maxsize=2)
+def _load_deformation_field(deform_field_path):
+    """Load the forward deformation field once per process (not once per tract).
+
+    Returns (per-component float64 arrays, inverse affine). The original reloaded
+    and re-parsed the (X, Y, Z, 3) field for each of the 42 atlas tracts.
+    """
+    def_img = nib.load(deform_field_path)
+    def_data = def_img.get_fdata()           # (X, Y, Z, 3), values = MGH35 world mm
+    # Squeeze in case of singleton time dimension: (X, Y, Z, 1, 3) -> (X, Y, Z, 3)
+    def_data = np.squeeze(def_data)
+    comps = tuple(np.ascontiguousarray(def_data[..., d]) for d in range(3))
+    return comps, np.linalg.inv(def_img.affine)
+
+
 def get_transformed_tractogram_nonlinear(
     input_path,
     deform_field_path,
@@ -103,31 +127,31 @@ def get_transformed_tractogram_nonlinear(
         reg_transform -ref FA -cpp CPP -def deform_field.nii.gz
 
     That field is defined on the FA grid; each voxel stores the world-mm
-    coordinate in MGH35 space that it maps to (forward: FA_world → MGH35_world).
+    coordinate in MGH35 space that it maps to (forward: FA_world -> MGH35_world).
 
     Inversion uses fixed-point iteration initialised from the affine-only
     estimate.  Update rule (subscript n = iteration):
         p_{n+1} = p_n + inv_A @ (q - def(p_n))
     where q is the MGH35 world-mm target, p is the current FA world-mm
-    estimate, and A is the affine (FA_world → MGH35_world) used as the
+    estimate, and A is the affine (FA_world -> MGH35_world) used as the
     approximate Jacobian so the correction is expressed in FA mm.
 
     NiftyReg affine convention (-ref FA -flo MGH35 -aff AFF):
-        AFF maps FA_world → MGH35_world  (reference → floating)
-        inv(AFF) maps MGH35_world → FA_world  (used for init and Jacobian)
+        AFF maps FA_world -> MGH35_world  (reference -> floating)
+        inv(AFF) maps MGH35_world -> FA_world  (used for init and Jacobian)
+
+    Every iteration acts on points independently, so all points of all
+    streamlines are stacked and updated together (the original ran 20
+    iterations x 3 map_coordinates calls once per streamline).
     """
-    def_img = nib.load(deform_field_path)
-    def_data = def_img.get_fdata()           # (X, Y, Z, 3), values = MGH35 world mm
-    # Squeeze in case of singleton time dimension: (X, Y, Z, 1, 3) → (X, Y, Z, 3)
-    def_data = np.squeeze(def_data)
-    def_inv_affine = np.linalg.inv(def_img.affine)
+    def_comps, def_inv_affine = _load_deformation_field(deform_field_path)
 
     # Affine-only inverse for initialisation and as approximate Jacobian.
     if init_affine_path is not None:
         aff = np.loadtxt(init_affine_path)
         if aff.shape == (3, 4):
             aff = np.vstack([aff, [0, 0, 0, 1]])
-        inv_aff = np.linalg.inv(aff)         # MGH35_world → FA_world
+        inv_aff = np.linalg.inv(aff)         # MGH35_world -> FA_world
     else:
         # Fallback: identity (only valid if FA and MGH35 share world coords).
         inv_aff = np.eye(4)
@@ -135,57 +159,62 @@ def get_transformed_tractogram_nonlinear(
     sft = load_tractogram(input_path, reference="same")
     sft.to_rasmm()
 
-    new_streamlines = []
-    for sl in sft.streamlines:
-        N = len(sl)
-        sl_hom = np.hstack([sl, np.ones((N, 1))]).T     # (4, N)
+    streamlines = list(sft.streamlines)
+    if not streamlines:
+        return _make_sft_safe([], out_reference_path, Space.RASMM, input_path)
+    lengths = np.array([len(sl) for sl in streamlines])
+    q = np.concatenate(streamlines)                        # (Ntot, 3) targets in MGH35 mm
+    N = len(q)
+    sl_hom = np.hstack([q, np.ones((N, 1))]).T             # (4, N)
 
-        # Affine-only initialisation: inv_aff @ q → FA world mm
-        p = (inv_aff @ sl_hom)[:3].T                    # (N, 3) in FA world mm
+    # Affine-only initialisation: inv_aff @ q -> FA world mm
+    p = (inv_aff @ sl_hom)[:3].T                           # (N, 3) in FA world mm
 
-        for _ in range(n_iter):
-            # FA world mm → FA voxel coordinates
-            p_hom = np.hstack([p, np.ones((N, 1))]).T
-            vox = (def_inv_affine @ p_hom)[:3]           # (3, N)
+    for _ in range(n_iter):
+        # FA world mm -> FA voxel coordinates
+        p_hom = np.hstack([p, np.ones((N, 1))]).T
+        vox = tuple((def_inv_affine @ p_hom)[:3])          # 3 coordinate arrays
 
-            # Sample forward deformation field → predicted MGH35 world mm
-            predicted = np.zeros((N, 3))
-            for dim in range(3):
-                # map_coordinates expects a tuple of coordinate arrays, one per dimension
-                predicted[:, dim] = map_coordinates(
-                    def_data[..., dim], tuple(vox), order=1, mode='nearest'
-                )
+        # Sample forward deformation field -> predicted MGH35 world mm
+        predicted = np.zeros((N, 3))
+        for dim in range(3):
+            predicted[:, dim] = map_coordinates(def_comps[dim], vox, order=1, mode='nearest')
 
-            # Residual in MGH35 mm; map back to FA mm via inverse affine
-            residual_mgh = sl - predicted                # (N, 3) in MGH35 mm
-            residual_hom = np.hstack([residual_mgh, np.zeros((N, 1))]).T
-            residual_fa = (inv_aff @ residual_hom)[:3].T  # (N, 3) in FA mm
+        # Residual in MGH35 mm; map back to FA mm via inverse affine
+        residual_mgh = q - predicted                       # (N, 3) in MGH35 mm
+        residual_hom = np.hstack([residual_mgh, np.zeros((N, 1))]).T
+        residual_fa = (inv_aff @ residual_hom)[:3].T       # (N, 3) in FA mm
 
-            p = p + residual_fa
+        p = p + residual_fa
 
-        new_streamlines.append(p)
-
+    new_streamlines = np.split(p, np.cumsum(lengths)[:-1])
     return _make_sft_safe(new_streamlines, out_reference_path, Space.RASMM, input_path)
 
 
 def _densify_streamlines(streamlines, voxel_sizes, factor=0.5):
-    """Interpolate points along streamlines so that no step is larger than factor * minimum voxel size."""
+    """Interpolate points along streamlines so that no step is larger than factor * minimum voxel size.
+
+    Vectorised per streamline (the original appended point by point in a Python
+    loop over every segment). Output is identical: same points, same order, same
+    float32 arithmetic (the interpolation weight is rounded to float32 first,
+    exactly like numpy did when multiplying a float32 array by a Python float).
+    """
     step_size = factor * np.min(voxel_sizes)
     densified = []
     for sl in streamlines:
         diffs = np.diff(sl, axis=0)
         dists = np.linalg.norm(diffs, axis=1)
         if np.any(dists > step_size):
-            new_sl = [sl[0]]
-            for i, d in enumerate(dists):
-                p0 = sl[i]
-                p1 = sl[i+1]
-                if d > step_size:
-                    n_steps = int(np.ceil(d / step_size))
-                    for step in range(1, n_steps):
-                        new_sl.append(p0 + (step / n_steps) * (p1 - p0))
-                new_sl.append(p1)
-            densified.append(np.array(new_sl, dtype=np.float32))
+            # segments longer than one step are split into n_steps pieces, the others kept whole
+            n_steps = np.where(dists > step_size,
+                               np.ceil(dists.astype(np.float64) / step_size).astype(np.int64), 1)
+            seg = np.repeat(np.arange(len(dists)), n_steps)
+            first = np.cumsum(n_steps) - n_steps
+            step = np.arange(len(seg)) - np.repeat(first, n_steps)          # 0 .. n_steps-1 inside each segment
+            w = (step / n_steps[seg]).astype(np.float32)[:, None]
+            p0 = sl[seg]
+            pts = p0 + w * (sl[seg + 1] - p0)                              # step 0 reproduces p0 exactly
+            densified.append(np.vstack([pts, sl[-1:]]).astype(np.float32))
         else:
             densified.append(sl)
     return densified
@@ -281,11 +310,11 @@ def verify_density_maps(
     return ok
 
 
-def main():
+def _build_parser():
     parser = argparse.ArgumentParser(
         description="Transform TRK files and generate density maps."
     )
-    parser.add_argument("--input-trk", required=True)
+    parser.add_argument("--input-trk", required=False)   # required unless --batch (checked in main)
     parser.add_argument("--output-trk", required=False)
     parser.add_argument("--output-vol", required=False)
     parser.add_argument("--in-reference", required=False)
@@ -324,11 +353,28 @@ def main():
         default=0,
         help="NiftyReg platform for reg_resample: 0=CPU (default), 1=CUDA",
     )
-    args = parser.parse_args()
 
+    parser.add_argument(
+        "--no-verify",
+        action="store_true",
+        help="Skip the density-map verification step (its result is only ever printed as a "
+             "warning for empty masks; the verification volume it writes is not read by the pipeline).",
+    )
+    parser.add_argument(
+        "--batch",
+        required=False,
+        help="Text file with one job per line (each line = the command-line arguments of a single "
+             "invocation, shell-quoted). All jobs run in this one process, so dipy/scipy are imported "
+             "once and the deformation field is loaded once instead of once per tract.",
+    )
+    return parser
+
+
+def _process(args):
+    """Run one job described by parsed arguments. Returns a process exit code."""
     if not args.output_trk and not args.output_vol:
         print("Error: at least one of --output-trk or --output-vol must be specified.")
-        sys.exit(1)
+        return 1
 
     # Load affine matrix once if provided
     mat = None
@@ -339,10 +385,10 @@ def main():
                 mat = np.vstack([mat, [0, 0, 0, 1]])
             elif mat.shape != (4, 4):
                 print(f"Error: affine must be 3x4 or 4x4, got {mat.shape}")
-                sys.exit(1)
+                return 1
         except Exception as exc:
             print(f"Error reading affine: {exc}")
-            sys.exit(1)
+            return 1
 
     try:
         # 1. Affine trk transform
@@ -383,27 +429,28 @@ def main():
 
         # 4. Header-only re-affine (no coordinate transform).
         #
-        # This re-interprets the atlas trk's existing voxel-index coordinates
-        # against --in-reference's affine/dims, on the assumption that they
-        # already line up with that grid. When they don't quite (edge
-        # rounding in the vendor atlas file), a point can land just outside
-        # [0, dims) - invisible here since this used raw nibabel I/O with no
-        # bbox check, but fatal on the next load_tractogram() downstream
-        # (metrics_calc.sh's density-map step), which does validate. Route
-        # through _make_sft_safe so that check happens now, with the same
-        # clamp-to-boundary behaviour as the affine/nonlinear warp paths
-        # above, rather than crashing one step later with a less useful
-        # traceback.
+        # Re-labels the atlas trk with --in-reference's affine/dims without moving
+        # any streamline in world space. nibabel.streamlines.load() returns points
+        # in RAS+mm world coordinates (the header's voxel_to_rasmm has already been
+        # applied), so they must be passed on as Space.RASMM. They must NOT be
+        # passed as Space.VOX: that would read world-mm values as voxel indices,
+        # so negative coordinates are clamped to 0 and the whole tract collapses
+        # onto the volume boundary (every streamline reported as clamped), giving
+        # an empty/garbage atlas density map after resampling to subject space.
+        #
+        # Routed through _make_sft_safe so any point that lands just outside the
+        # reference grid (edge rounding in the vendor atlas file) is clamped here
+        # instead of crashing the next load_tractogram() downstream.
         if args.convert_affine and args.in_reference and args.output_trk:
             raw = nib.streamlines.load(args.input_trk)
             new_sft = _make_sft_safe(
-                raw.streamlines, args.in_reference, Space.VOX, args.input_trk
+                raw.streamlines, args.in_reference, Space.RASMM, args.input_trk
             )
             save_tractogram(new_sft, args.output_trk)
 
         # 5. Optional verification: generate density map from output trk and compare
         # to the reference NIfTI using Dice + CoM distance.
-        if args.verify_nifti and args.output_trk and Path(args.output_trk).exists():
+        if args.verify_nifti and args.output_trk and Path(args.output_trk).exists() and not args.no_verify:
             if args.out_reference and Path(args.out_reference).exists():
                 verify_density_maps(
                     args.output_trk,
@@ -416,7 +463,33 @@ def main():
 
     except Exception as exc:
         print(f"Processing failed: {exc}")
-        sys.exit(1)
+        return 1
+    return 0
+
+
+def main():
+    parser = _build_parser()
+    args = parser.parse_args()
+    if not args.batch and not args.input_trk:
+        parser.error("the following arguments are required: --input-trk")
+    if args.batch:
+        # One interpreter for all jobs; stop at the first failure like `set -e` did
+        # for the separate invocations.
+        with open(args.batch) as fh:
+            for line in fh:
+                line = line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                job = parser.parse_args(shlex.split(line))
+                if not job.input_trk:
+                    parser.error("batch line without --input-trk: " + line)
+                rc = _process(job)
+                if rc != 0:
+                    sys.exit(rc)
+        return
+    rc = _process(args)
+    if rc != 0:
+        sys.exit(rc)
 
 
 if __name__ == "__main__":

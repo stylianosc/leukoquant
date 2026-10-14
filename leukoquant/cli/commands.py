@@ -15,8 +15,8 @@ import os
 # workflows, one-per-parcellation) Snakemake rule that actually does the work.
 # --force on these commands is a plain boolean -- callers shouldn't need to
 # know Snakemake rule names -- so each command maps it to its own known
-# rule(s) internally. process-all's --force stays rule-name-based since it
-# spans multiple stages and there's no single obvious rule to force.
+# rule(s) internally. process-all spans every stage, so its --force takes an
+# optional list of stage names instead (see PROCESS_ALL_FORCE_STAGES below).
 _FORCE_RULE_NAMES = {
     "gif": ["run_gif"],
     "bamos": ["run_bamos"],
@@ -41,6 +41,61 @@ def _force_rules_for_parcellation(rule_prefix: str, parcellation: str, force: bo
     if not force:
         return None
     return [f"{rule_prefix}_{p.strip()}" for p in parcellation.split(",") if p.strip()]
+
+
+# process-all --force: the stages a user can name, each mapped to the rule(s)
+# that stage runs inside process-all's combined DAG. process_all_workflow.smk
+# imports every sub-workflow as a module with a prefix ("use rule * from dti
+# as dti_*"), so rule names there differ from the standalone commands' (e.g.
+# metrics is metrics_extract_metrics_<parc>, not extract_metrics_<parc>), and
+# the atlas converter is nested inside the tracula module (tracula_other_*).
+# Snakemake silently ignores a --forcerun name that matches no rule, so
+# callers name stages and this table owns the rule names;
+# test_process_all_force.py checks every entry against the workflow files.
+# "{parc}" expands to each requested parcellation.
+PROCESS_ALL_FORCE_STAGES = {
+    "recon":   ["recon_recon_all"],
+    "gif":     ["gif_run_gif"],
+    "bamos":   ["bamos_run_bamos", "bamos_run_bamos_correction"],
+    "atlas":   ["tracula_other_convert_atlas"],
+    "tracula": ["tracula_trac_all_{parc}"],
+    "dti":     ["dti_dti"],
+    "noddi":   ["noddi_noddi"],
+    "tractqc": ["tract_qc_tract_qc_{parc}"],
+    "zscore":  ["z_score_z_score"],
+    "metrics": ["metrics_extract_metrics_{parc}"],
+}
+# Bare --force (no stage list) keeps its original meaning: metrics only.
+PROCESS_ALL_FORCE_DEFAULT = "metrics"
+
+
+def process_all_force_rules(force: Optional[str], parcellation: str,
+                            skip_zscore: bool = False) -> Optional[List[str]]:
+    """Resolve process-all's --force value ("metrics", "zscore,metrics", ...)
+    to the Snakemake rule names to force-rerun, or None when nothing is forced.
+
+    Raises ValueError for an unknown stage, for a stage that does not run in
+    this invocation (zscore with --skip-zscore, atlas without a non-FreeSurfer
+    parcellation), so a typo can never silently force nothing."""
+    if not force:
+        return None
+    parcs = [p.strip() for p in parcellation.split(",") if p.strip()]
+    stages = [s.strip().lower() for s in force.split(",") if s.strip()]
+    unknown = [s for s in stages if s not in PROCESS_ALL_FORCE_STAGES]
+    if unknown:
+        raise ValueError(f"--force: unknown stage(s) {unknown}; valid stages: "
+                         f"{', '.join(PROCESS_ALL_FORCE_STAGES)}")
+    if "zscore" in stages and skip_zscore:
+        raise ValueError("--force zscore cannot be combined with --skip-zscore")
+    if "atlas" in stages and not any(p != "freesurfer" for p in parcs):
+        raise ValueError("--force atlas needs a non-FreeSurfer parcellation (e.g. gif): "
+                         "the atlas conversion only runs for those")
+    rules: List[str] = []
+    for stage in stages:
+        for rule in PROCESS_ALL_FORCE_STAGES[stage]:
+            names = [rule.format(parc=p) for p in parcs] if "{parc}" in rule else [rule]
+            rules += [n for n in names if n not in rules]
+    return rules
 
 
 from leukoquant.core.gif_processor import apply_gif
@@ -72,20 +127,24 @@ def process_all(subject: Optional[str] = None,
                 covariates: Optional[str] = None,
                 poly_terms: Optional[str] = None,
                 parcellation: str = "freesurfer",
-                force: bool = False,
+                force: Optional[str] = None,
                 config_yaml: Optional[str] = None,
-                gpu: bool = False) -> dict:
+                gpu: bool = False,
+                retry_input_failures: bool = False) -> dict:
     """Run full pipeline process-all.
 
-    force: Force-rerun metrics extraction (for the given --parcellation)
-        even if outputs already exist. Snakemake scopes this to the metrics
-        rule(s) plus anything downstream, so subjects whose earlier stages
-        (recon-all/DTI/GIF/tractography) are already complete have those
-        stages correctly skipped.
+    force: comma-separated stages to force-rerun even if their outputs exist
+        (see PROCESS_ALL_FORCE_STAGES), e.g. "metrics" or "zscore,metrics";
+        None/"" forces nothing. Snakemake reruns each forced stage plus
+        everything downstream of it; stages upstream that are already up to
+        date are left untouched.
     """
     try:
         if verbose:
             print("Running full pipeline process-all")
+        force_rules = process_all_force_rules(force, parcellation, skip_zscore)
+        if force_rules and verbose:
+            print(f"Forcing rule(s): {', '.join(force_rules)} (plus everything downstream)")
 
         results = apply_process_all(
             subject_input=subject, t1_pattern=t1, flair_pattern=flair,
@@ -94,10 +153,11 @@ def process_all(subject: Optional[str] = None,
             skip_zscore=skip_zscore, healthy_list=healthy_subset, demographics=demographics_csv,
             covariates=covariates, poly_terms=poly_terms,
             parcellation=parcellation,
-            force_rules=_force_rules_for_parcellation("metrics_extract_metrics", parcellation, force),
+            force_rules=force_rules,
             verbose=verbose,
             config_yaml=config_yaml,
             gpu=gpu,
+            retry_input_failures=retry_input_failures,
         )
         return results
     except Exception as e:

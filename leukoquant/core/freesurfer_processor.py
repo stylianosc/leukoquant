@@ -21,7 +21,7 @@ from leukoquant.utils.container_utils import (
     FREESURFER_SIF_HF_PATH,
 )
 from leukoquant.utils.external_utils import _resolve_fs_license
-from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy, write_run_config
 
 logger = logging.getLogger(__name__)
 
@@ -107,8 +107,9 @@ class FreeSurferProcessor:
             "leukoquant_parent_dir": str(self.leukoquant_parent_dir.absolute()),
         }
         import yaml as _yaml
-        with open(config_file, "w") as f:
-            _yaml.dump(config_dict, f, default_flow_style=False)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+        # the record of the latest run (see write_run_config).
+        config_file = write_run_config(config_file, config_dict)
 
         bind_parts = (
             t1_binds

@@ -32,6 +32,139 @@ if "/leukoquant" not in sys.path and os.path.isdir("/leukoquant"):
 from leukoquant.utils.dwi_utils import normalize_bvec_bval_to_tracula
 
 
+# ── Recovery from a failed control-point fit ───────────────────────────────
+# When the DWI field of view cuts off part of the anatomy a tract runs through
+# (typically the lower brainstem for the corticospinal tracts), dmri_train
+# cannot fit control points for it ("Could not find satisfactory control point
+# fit") and crashes in the Priors step of -prep, hours in but before bedpostx.
+# Left alone, that loses every tract and the preprocessed DWI that DTI, NODDI,
+# z-score and metrics read. The workflow therefore finds the tract that failed
+# (failing_tract), reruns the stage without it (exclude_tracts_from_dmrirc),
+# and repeats if another tract fails; metrics then use the atlas for any tract
+# TRACULA did not produce.
+#
+# This is reactive on purpose: brainstem coverage does not separate the
+# sessions that crash from those that complete (EPAD: 46 crashed vs 1565
+# completed; even the best header-only measure catches 15 of 46 while flagging
+# 1% of good sessions), and the failing tract differs between sessions (lh.cst
+# in one, rh.cst in another). Coverage is still logged.
+BRAINSTEM_LABEL = 16  # FreeSurfer aseg "Brain-Stem"
+
+
+
+def brainstem_coverage(aseg_path: str, dwi_path: str) -> float:
+    """Fraction of the brainstem (aseg label 16) that lies inside the DWI grid.
+
+    Header-only: each brainstem voxel's scanner-space position is mapped through
+    both image affines into DWI voxel indices, and counted if it falls inside the
+    grid. This assumes the T1 and DWI share scanner coordinates (same exam), the
+    same assumption TRACULA's initial alignment starts from. Returns 1.0 when the
+    aseg has no brainstem voxels (nothing to protect).
+    """
+    import nibabel as nib
+
+    aseg = nib.load(str(aseg_path))
+    dwi = nib.load(str(dwi_path))
+    idx = np.argwhere(np.asarray(aseg.dataobj) == BRAINSTEM_LABEL)
+    if idx.size == 0:
+        return 1.0
+    world = nib.affines.apply_affine(aseg.affine, idx)
+    vox = np.rint(nib.affines.apply_affine(np.linalg.inv(dwi.affine), world))
+    shape = np.array(dwi.shape[:3])
+    inside = np.all((vox >= 0) & (vox < shape), axis=1)
+    return float(inside.mean())
+
+
+def brainstem_fov_features(aseg_path: str, dwi_path: str) -> dict:
+    """Header-only measures of how much of the brainstem the DWI grid contains.
+
+    All in scanner space (same assumption as brainstem_coverage), along the
+    scanner z axis (inferior-superior):
+      coverage            fraction of all brainstem voxels inside the DWI grid
+      inferior_coverage   same, for the lowest third of the brainstem only
+                          (where the corticospinal control points are)
+      inferior_margin_mm  how far the DWI's lowest slice sits above the
+                          brainstem's lowest voxel; <= 0 means the bottom of the
+                          brainstem is covered, larger means more is cut off
+      brainstem_height_mm extent of the brainstem along z
+    """
+    import nibabel as nib
+
+    aseg = nib.load(str(aseg_path))
+    dwi = nib.load(str(dwi_path))
+    idx = np.argwhere(np.asarray(aseg.dataobj) == BRAINSTEM_LABEL)
+    if idx.size == 0:
+        return {"coverage": 1.0, "inferior_coverage": 1.0, "inferior_margin_mm": 0.0, "brainstem_height_mm": 0.0}
+    world = nib.affines.apply_affine(aseg.affine, idx)
+    vox = np.rint(nib.affines.apply_affine(np.linalg.inv(dwi.affine), world))
+    inside = np.all((vox >= 0) & (vox < np.array(dwi.shape[:3])), axis=1)
+
+    z = world[:, 2]
+    lowest_third = z <= np.percentile(z, 100 / 3)
+    corners = np.array([[i, j, k] for i in (0, dwi.shape[0] - 1) for j in (0, dwi.shape[1] - 1)
+                        for k in (0, dwi.shape[2] - 1)])
+    dwi_zmin = nib.affines.apply_affine(dwi.affine, corners)[:, 2].min()
+    return {
+        "coverage": float(inside.mean()),
+        "inferior_coverage": float(inside[lowest_third].mean()),
+        "inferior_margin_mm": float(dwi_zmin - z.min()),
+        "brainstem_height_mm": float(z.max() - z.min()),
+    }
+
+
+def failing_tract(log_path: str) -> str:
+    """Name of the tract dmri_train was fitting when a run crashed, or "".
+
+    dmri_train logs "Loading streamlines from .../syn/<tract>.bbr.prep.trk"
+    as it starts each tract, so the last such line before the crash names the
+    one that failed. Streams the log (multi-hundred-MB) instead of loading it.
+    """
+    import re
+
+    rx = re.compile(r"Loading streamlines from \S*/syn/(\S+?)\.bbr\.prep\.trk")
+    last = ""
+    with open(log_path, errors="replace") as f:
+        for line in f:
+            m = rx.search(line)
+            if m:
+                last = m.group(1)
+    return last
+
+
+def exclude_tracts_from_dmrirc(dmrirc_path: str, pathlist_file: str, excluded) -> list:
+    """Remove `excluded` tracts from the dmrirc's pathlist and return the tracts kept.
+
+    Starts from the pathlist already set in the dmrirc (so repeated calls
+    accumulate), else TRACULA's default list; appends `set pathlist = (...)`,
+    which overrides earlier settings because dmrirc is sourced in order.
+    Raises ValueError if none of `excluded` is in the current list (already
+    excluded, or not a TRACULA tract), so callers can stop instead of looping.
+    """
+    import re
+
+    if isinstance(excluded, str):
+        excluded = [excluded]
+    with open(dmrirc_path) as f:
+        text = f.read()
+    current = None
+    for m in re.finditer(r"^set pathlist\s*=\s*\(([^)]*)\)", text, re.M):
+        current = m.group(1).split()
+    if current is None:
+        current = read_default_pathlist(pathlist_file)
+    if not any(t in current for t in excluded):
+        raise ValueError(f"{', '.join(excluded)} not in the current pathlist (already excluded?)")
+    kept = [t for t in current if t not in excluded]
+    with open(dmrirc_path, "a") as f:
+        f.write(f"\nset pathlist = ( {' '.join(kept)} )\n")
+    return kept
+
+
+def read_default_pathlist(pathlist_file: str) -> list:
+    """Tract names in TRACULA's pathlist.txt (first column)."""
+    with open(pathlist_file) as f:
+        return [line.split()[0] for line in f if line.strip()]
+
+
 def is_shelled_acquisition(
     bvals_path: Union[str, List[str]],
     b_range: int = 50,
@@ -562,8 +695,13 @@ def main(argv=None):
         help="If provided, writes '1' (acquisition is shelled) or '0' (not shelled) to this path.",
     )
     p.add_argument("--verbose", action="store_true")
+    p.add_argument("--aseg", required=False,
+                   help="aparc+aseg; when given, the brainstem coverage of the DWI field of view is logged")
 
     args = p.parse_args(argv)
+
+    if args.aseg and args.dwi:
+        print(f"Brainstem coverage of the DWI field of view: {brainstem_coverage(args.aseg, args.dwi[0]):.3f}")
 
     try:
         dmrirc, is_shelled = write_dmrirc(
@@ -595,4 +733,16 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == "failing-tract":
+        # failing-tract <log>: prints the tract dmri_train was fitting at the crash
+        print(failing_tract(sys.argv[2]))
+    elif len(sys.argv) > 1 and sys.argv[1] == "exclude-tracts":
+        # exclude-tracts <dmrirc> <pathlist.txt> <tract> [<tract> ...]
+        try:
+            kept = exclude_tracts_from_dmrirc(sys.argv[2], sys.argv[3], sys.argv[4:])
+        except ValueError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(3)
+        print(f"dmrirc restricted to {len(kept)} tracts (left out: {', '.join(sys.argv[4:])})")
+    else:
+        main()

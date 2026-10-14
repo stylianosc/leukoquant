@@ -74,7 +74,7 @@ Outputs are written to `{output_dir}/{subject}/` with one subfolder per stage.
 | `--scheduler` | `-S` | `choice` | `local` | No | Execution scheduler: `local` or `sge` |
 | `--cores` | `-c` | `int` | `1` | No | Number of Snakemake cores |
 | `--config-yaml` | - | `path` | `None` | No | YAML file supplying defaults for any of the above - see [Config file](#config-file-config-yaml) below |
-| `--force` | - | flag | `False` | No | Force-rerun metrics extraction (for `--parcellation`) even if outputs already exist. Anything upstream that's already up to date (recon-all, GIF, BaMoS, DTI, NODDI, TRACULA) is left untouched. |
+| `--force` | - | [STAGES] | - | No | Force-rerun stages even if their outputs already exist. Bare `--force` reruns metrics (for `--parcellation`). `--force STAGES` takes a comma-separated list of `recon`, `gif`, `bamos`, `atlas`, `tracula`, `dti`, `noddi`, `tractqc`, `zscore`, `metrics` (e.g. `--force zscore,metrics`). Everything downstream of a forced stage reruns too (`--force zscore` also recomputes metrics); stages upstream that are already up to date are left untouched. An unknown stage name is an error. |
 | `--verbose` | `-v` | flag | `False` | No | Print Snakemake stdout to the console |
 
 \* Required overall, but may be supplied via `--config-yaml` instead of the CLI flag - see below.

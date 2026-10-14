@@ -35,10 +35,19 @@ def compute_registration_ncc(subject_fa_path: str, resampled_template_path: str)
     have too little non-background overlap to compute a meaningful NCC."""
     a = np.asarray(nib.load(subject_fa_path).dataobj).astype(float)
     b = np.asarray(nib.load(resampled_template_path).dataobj).astype(float)
-    mask = (a > 0) | (b > 0)
+    # Resampling pads voxels outside the template's field of view with NaN;
+    # when the subject's field of view is larger than the template's, a single
+    # such voxel makes np.corrcoef return NaN, and a NaN NCC can never pass the
+    # threshold however good the registration is. Only finite voxels count.
+    finite = np.isfinite(a) & np.isfinite(b)
+    mask = finite & ((a > 0) | (b > 0))
     if mask.sum() < MIN_OVERLAP_VOXELS:
         return None
-    return float(np.corrcoef(a[mask], b[mask])[0, 1])
+    a, b = a[mask], b[mask]
+    if a.std() == 0 or b.std() == 0:
+        # Constant image: correlation is undefined, treat as a failed registration.
+        return None
+    return float(np.corrcoef(a, b)[0, 1])
 
 
 def main() -> None:

@@ -161,6 +161,7 @@ if USE_PARCELLATION_SUFFIX:
                 sif_tractography_path=lambda wildcards, p=_parc: _sif_tractography_path(wildcards.subject, p),
                 sif_output_dir=lambda wildcards, p=_parc: _sif_output_dir(wildcards.subject, p),
                 qc_script=QC_SCRIPT,
+                expected_tracts=cfg.get("expected_tracts", "tracula" if "tracula" in TRACTOGRAPHY_PATH else ""),
                 log_file=lambda wildcards, p=_parc: translate_path(
                     str(Path(f"{OUTPUT_DIR}/{wildcards.subject}/tract_qc-{p}/logs/tract_qc_log.txt").resolve()),
                     BIND_MAP,
@@ -184,11 +185,20 @@ if USE_PARCELLATION_SUFFIX:
                 echo "Date: $(date)"
                 echo "Date: $(date)" >&2
 
+                enable_line_buffering
+                trap 'report_total_peak_mem' EXIT INT TERM
+
+                EXPECTED_ARG=()
+                if [ -n "{params.expected_tracts}" ]; then
+                    EXPECTED_ARG=(--expected-tracts "{params.expected_tracts}")
+                fi
+
                 mkdir -p "{params.sif_output_dir}"
-                python {params.qc_script} \
+                run_with_peak_mem "tract_qc" python {params.qc_script} \
                     --subject {wildcards.subject} \
                     --tractography-path '{params.sif_tractography_path}' \
                     --output '{params.sif_output_dir}' \
+                    "${{EXPECTED_ARG[@]}}" \
                     --skip-subject-dir
                 """
 
@@ -215,6 +225,7 @@ else:
             sif_tractography_path=lambda wildcards: _sif_tractography_path(wildcards.subject),
             sif_output_dir=lambda wildcards: _sif_output_dir(wildcards.subject),
             qc_script=QC_SCRIPT,
+            expected_tracts=cfg.get("expected_tracts", "tracula" if "tracula" in TRACTOGRAPHY_PATH else ""),
             log_file=lambda wildcards: translate_path(str(Path(f"{OUTPUT_DIR}/{wildcards.subject}/tract_qc/logs/tract_qc_log.txt").resolve()), BIND_MAP),
             error_file=lambda wildcards: translate_path(str(Path(f"{OUTPUT_DIR}/{wildcards.subject}/tract_qc/logs/tract_qc_error.txt").resolve()), BIND_MAP),
         resources:
@@ -231,11 +242,20 @@ else:
 
             echo "Date: $(date)"
             echo "Date: $(date)" >&2
+
+            enable_line_buffering
+            trap 'report_total_peak_mem' EXIT INT TERM
+
+            EXPECTED_ARG=()
+            if [ -n "{params.expected_tracts}" ]; then
+                EXPECTED_ARG=(--expected-tracts "{params.expected_tracts}")
+            fi
             
             mkdir -p "{params.sif_output_dir}"
-            python {params.qc_script} \
+            run_with_peak_mem "tract_qc" python {params.qc_script} \
                 --subject {wildcards.subject} \
                 --tractography-path '{params.sif_tractography_path}' \
                 --output '{params.sif_output_dir}' \
+                "${{EXPECTED_ARG[@]}}" \
                 --skip-subject-dir
             """

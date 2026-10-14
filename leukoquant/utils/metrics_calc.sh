@@ -6,7 +6,8 @@
 # Computes statistics along tracts, lesions, and other ROIs.
 #
 
-set -e
+# -E: the ERR trap below also fires inside functions, so a failing step always names itself.
+set -eE
 
 # ============================================================================
 # Parse Arguments
@@ -35,16 +36,8 @@ PLATF=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/bash_utils.sh"
 
-# Tracks the combined RSS of this script's entire process tree for the
-# whole run, so real subjects give real numbers instead of guessing at a
-# resource request. Added 2026-08-30 after two subjects (DPUK
-# NEW002_PETMR_V2, ADNI3 subj-007-s-6120) crashed inside the
-# reg_aladin/reg_f3d/reg_transform/reg_resample registration block with no
-# diagnostic output at all -- consistent with, but not proven to be,
-# memory exhaustion. stop_peak_mem_monitor is called from cleanup() below
-# (not its own EXIT trap) so it reports even on an error/signal exit
-# without clobbering the trap cleanup() is already registered under.
-start_peak_mem_monitor
+# Memory and runtime usage are tracked natively via run_with_peak_mem
+# by the caller without any background polling loops.
 
 # CUDA-enabled NiftyReg build (downloaded on demand by ensure_niftyreg_gpu()
 # only when --gpu is requested; CPU-compatible by default via -platf 0).
@@ -140,15 +133,23 @@ _scratch_base="/scratch0"
 if [ ! -d "$_scratch_base" ] || [ ! -w "$_scratch_base" ]; then
     _scratch_base="/tmp"
 fi
-SCRATCH_DIR="${_scratch_base}/metrics_calc_${SUBJECT}"
+# One scratch folder per TASK, not per session: the GIF and FreeSurfer metrics tasks of the same session often start in
+# the same second on the same node and share /scratch0. A name built from the session alone made them share one
+# folder, and whichever finished first deleted it under the other (missing mgh2subj_affine.txt, reg_aladin "folder does
+# not exist"). The session id may contain a slash, so it is flattened; job, task and process ids make the name unique.
+_scratch_subject="${SUBJECT//\//_}"
+_scratch_parc="$(printf '%s' "$OUTPUT_DIR" | grep -o 'metrics-[A-Za-z0-9]*' | head -1)"
+SCRATCH_DIR="${_scratch_base}/metrics_calc_${_scratch_subject}_${_scratch_parc:-metrics}_${JOB_ID:-nojob}_${SGE_TASK_ID:-0}_$$_${RANDOM}"
 mkdir -p "$SCRATCH_DIR"
 
 function cleanup {
-    stop_peak_mem_monitor
-    rm -rf "$SCRATCH_DIR"
+    scratch_cleanup "$SCRATCH_DIR"
 }
 
-trap cleanup EXIT ERR INT TERM
+trap cleanup EXIT INT TERM
+# A step that dies under `set -e` used to leave no trace in the log. Name the command and
+# say OUT OF MEMORY when the status is 137 (see report_failed_command in bash_utils.sh).
+trap 'report_failed_command "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 # ============================================================================
 # Validation
@@ -370,6 +371,9 @@ if [ -n "$T1_PATH" ] && [ "$T1_PATH" != "None" ]; then
         # T1 is a direct file path - use it as-is
         T1_FILE="$T1_BASE"
         echo "✓ Found T1 file (direct) [space=${T1_SPACE}]: $T1_FILE"
+        T1_SINGLEFRAME="$SCRATCH_DIR/t1_singleframe.nii.gz"
+        python3 "$SCRIPT_DIR/image_utils.py" --input "$T1_FILE" --output "$T1_SINGLEFRAME" --op first_frame
+        T1_FILE="$T1_SINGLEFRAME"
         echo -e "t1\tmain\t${T1_SPACE}\t${T1_FILE}" >> "$INPUT_MANIFEST"
     elif [ -d "$T1_BASE" ]; then
         # T1 is a directory - search with glob
@@ -378,10 +382,18 @@ if [ -n "$T1_PATH" ] && [ "$T1_PATH" != "None" ]; then
             echo "WARNING: No T1 files found matching $T1_GLOB in $T1_BASE"
         else
             T1_COUNT=$(echo "$T1_FILES_LIST" | wc -l | tr -d ' ')
-            T1_FILE=$(echo "$T1_FILES_LIST" | head -n 1)
             echo "✓ Found $T1_COUNT T1 file(s) [space=${T1_SPACE}]"
+            _idx=0
             while IFS= read -r _f; do
-                echo -e "t1\tmain\t${T1_SPACE}\t${_f}" >> "$INPUT_MANIFEST"
+                [ -z "$_f" ] && continue
+                _base_name=$(basename "$_f")
+                _t1_single="$SCRATCH_DIR/t1_singleframe_${_idx}_${_base_name}"
+                python3 "$SCRIPT_DIR/image_utils.py" --input "$_f" --output "$_t1_single" --op first_frame
+                echo -e "t1\tmain\t${T1_SPACE}\t${_t1_single}" >> "$INPUT_MANIFEST"
+                if [ "$_idx" -eq 0 ]; then
+                    T1_FILE="$_t1_single"
+                fi
+                _idx=$((_idx + 1))
             done <<< "$T1_FILES_LIST"
         fi
     else
@@ -569,7 +581,12 @@ if [ -n "$AUTO_FA_SKELETON_PATH" ] && [ -f "$AUTO_FA_SKELETON_PATH" ]; then
             # See check_atlas_registration.py's docstring for why this check exists
             # (transform_trk.py's --verify-nifti alone cannot catch a genuinely bad
             # reg_aladin/reg_f3d registration).
-            ATLAS_REG_QC=$($PYTHON3 "$SCRIPT_DIR/check_atlas_registration.py" "$FA_FILE" "$RES_FA" --threshold 0.4 2>/dev/null)
+            # The checker exits 1 on FAIL. Under `set -e` that non-zero status
+            # would end this script right here, silently, before the retry and
+            # skip-the-atlas handling below ever ran -- so "|| true": the PASS/FAIL
+            # verdict is read from stdout. stderr is left visible so a genuine
+            # crash of the checker shows up in the error log.
+            ATLAS_REG_QC=$($PYTHON3 "$SCRIPT_DIR/check_atlas_registration.py" "$FA_FILE" "$RES_FA" --threshold 0.4) || true
             ATLAS_REG_STATUS="${ATLAS_REG_QC%% *}"
             ATLAS_REG_NCC="${ATLAS_REG_QC#* }"
 
@@ -704,7 +721,14 @@ if [ "$NEED_DWI_TO_T1_REG" = "true" ] && [ -n "$DWI" ] && [ "$DWI" != "None" ] &
         if [ -n "$BVAL" ] && [ "$BVAL" != "None" ]; then
             REG_ARGS+=(--bval "$BVAL")
         fi
-        bash "$REGISTER_SCRIPT" "${REG_ARGS[@]}"
+        # register_dwi_to_t1.sh prints its own "OUT OF MEMORY:" / "FAILED:" line; without a
+        # registration the atlas tracts cannot be placed (volume 0), so stop with its status.
+        _reg_status=0
+        bash "$REGISTER_SCRIPT" "${REG_ARGS[@]}" || _reg_status=$?
+        if [ "$_reg_status" -ne 0 ]; then
+            report_step_failure "DWI -> T1 registration" "$_reg_status" "" || true
+            exit "$_reg_status"
+        fi
         fi
 
         echo "✓ DWI -> T1 registration completed."
@@ -916,7 +940,10 @@ if [ "$SKIP_SKULLSTRIP_T1" != "true" ] && [ "$SKIP_SKULLSTRIP_T1" != "True" ]; t
             #echo "  [metrics] Skull stripping T1 for TIV computation ..."
             mkdir -p "$T1_SPACE_DIR/t1"
             if command -v mri_synthstrip >/dev/null 2>&1; then
-                mri_synthstrip -i "$T1_IN_SPACE" -o "$T1_BRAIN_FOR_METRICS" >/dev/null 2>&1
+                # Its output used to go to /dev/null: a skull strip that ran out of memory then
+                # killed the step without a word. run_synthstrip prints the output and an
+                # "OUT OF MEMORY:" / "FAILED:" line; the step stops (the TIV is required).
+                run_synthstrip "T1 (TIV)" "$T1_IN_SPACE" "$T1_BRAIN_FOR_METRICS" || exit 1
             else
                 echo "WARNING: mri_synthstrip not found; TIV will be skipped."
                 T1_BRAIN_FOR_METRICS=""
@@ -926,15 +953,19 @@ if [ "$SKIP_SKULLSTRIP_T1" != "true" ] && [ "$SKIP_SKULLSTRIP_T1" != "True" ]; t
 fi
 
 
-# Snapshot exact inputs to metrics_calc.py for debugging and standalone re-runs.
-DEBUG_METRICS_DIR="$(dirname "$OUTPUT_DIR")/debug/metrics_inputs"
-rm -rf "$DEBUG_METRICS_DIR"
-mkdir -p "$DEBUG_METRICS_DIR"
-cp -r "$T1_SPACE_DIR/." "$DEBUG_METRICS_DIR/"
-if [ -n "$QC_REPORT" ] && [ -f "$QC_REPORT" ]; then
-    cp "$QC_REPORT" "$DEBUG_METRICS_DIR/qc_report.json"
-fi
-echo "✓ Debug inputs saved to debug/metrics_inputs"
+# Snapshot of the exact inputs to metrics_calc.py (for debugging and standalone
+# re-runs). Disabled: it copied the whole T1-space input set into
+# metrics-<parcellation>/debug/metrics_inputs on every run (~160 MB per session
+# and parcellation, across thousands of sessions), and nothing reads it. Remove
+# the leading "# " from the lines below to bring it back for a debugging session.
+# DEBUG_METRICS_DIR="$(dirname "$OUTPUT_DIR")/debug/metrics_inputs"
+# rm -rf "$DEBUG_METRICS_DIR"
+# mkdir -p "$DEBUG_METRICS_DIR"
+# cp -r "$T1_SPACE_DIR/." "$DEBUG_METRICS_DIR/"
+# if [ -n "$QC_REPORT" ] && [ -f "$QC_REPORT" ]; then
+#     cp "$QC_REPORT" "$DEBUG_METRICS_DIR/qc_report.json"
+# fi
+# echo "✓ Debug inputs saved to debug/metrics_inputs"
 
 echo ""
 echo "--- Computing Metrics ---"

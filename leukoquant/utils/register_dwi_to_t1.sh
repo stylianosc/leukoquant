@@ -29,6 +29,9 @@
 
 set -Eeuo pipefail
 
+# run_synthstrip and the failure classifier live next to run_with_peak_mem.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/bash_utils.sh"
+
 trap 'echo "ERROR: register_dwi_to_t1.sh failed at line ${LINENO}: ${BASH_COMMAND}" >&2' ERR
 
 # ============================================================================
@@ -278,11 +281,8 @@ if [[ ! -f "$B0_BRAIN" ]]; then
         cp "$B0_FIRST" "$B0_BRAIN"
     else
         log "  [3/6] Skull stripping b0 ..."
-        if ! _SYNTHSTRIP_OUT=$(mri_synthstrip -i "$B0_FIRST" -o "$B0_BRAIN" 2>&1); then
-            echo "ERROR: mri_synthstrip failed on b0. Output:" >&2
-            echo "$_SYNTHSTRIP_OUT" >&2
-            exit 1
-        fi
+        # run_synthstrip (bash_utils.sh) prints the tool output and an OUT OF MEMORY / FAILED line
+        run_synthstrip "b0" "$B0_FIRST" "$B0_BRAIN" || exit 1
     fi
 else
     log "  [3/6] [SKIP] b0 brain already exists."
@@ -298,11 +298,7 @@ if [[ ! -f "$T1_BRAIN" ]]; then
         cp "$T1" "$T1_BRAIN"
     else
         log "  [4/6] Skull stripping T1 ..."
-        if ! _SYNTHSTRIP_OUT=$(mri_synthstrip -i "$T1" -o "$T1_BRAIN" 2>&1); then
-            echo "ERROR: mri_synthstrip failed on T1. Output:" >&2
-            echo "$_SYNTHSTRIP_OUT" >&2
-            exit 1
-        fi
+        run_synthstrip "T1" "$T1" "$T1_BRAIN" || exit 1
     fi
 else
     log "  [4/6] [SKIP] T1 brain already exists."

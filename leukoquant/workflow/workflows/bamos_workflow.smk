@@ -351,7 +351,7 @@ rule run_bamos:
             {params.platf}"
 
         echo "Running $bamos_cmd"
-        $bamos_cmd
+        run_with_peak_mem "bamos" $bamos_cmd
 
         # BaMoS writes its outputs into $scratch_path/BaMoS_$BAMOS_ID/
         scratch_bamos_dir="$scratch_path/BaMoS_$BAMOS_ID"
@@ -481,7 +481,7 @@ rule run_bamos_correction:
             -corr choroid cortex sheet"
 
         echo "Running $bamos_corr_cmd"
-        $bamos_corr_cmd
+        run_with_peak_mem "correct_bamos" $bamos_corr_cmd
 
         corr_output="{params.bamos_essential_sing}/CorrectLesion.nii.gz"
         if [ ! -f "$corr_output" ]; then

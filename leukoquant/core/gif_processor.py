@@ -15,7 +15,7 @@ import yaml
 
 from leukoquant.utils.subject_utils import read_subjects, resolve_subject_pattern
 from leukoquant.utils.bind_utils import dir_level_bind_files, consolidate_bind_entries
-from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import add_forcerun_args, add_rerun_triggers_args, load_yaml_config, first_truthy, write_run_config
 from leukoquant.utils.container_utils import (
     ensure_container,
     MINICONDA_SIF_FILENAME,
@@ -229,8 +229,9 @@ class GIFProcessor:
         }
 
         config_file = str(out_path.absolute()) + "/gif_config.yaml"
-        with open(config_file, "w") as f:
-            yaml.dump(config_dict, f, default_flow_style=False)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+        # the record of the latest run (see write_run_config).
+        config_file = write_run_config(config_file, config_dict)
 
         # Ensure container is present (downloaded from HuggingFace if missing)
         containers_folder = self.leukoquant_dir / "workflow" / "containers"

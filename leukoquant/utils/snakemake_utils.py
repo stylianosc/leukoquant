@@ -1,8 +1,47 @@
 """Shared helpers for building Snakemake CLI invocations across processors."""
+import os
+import uuid
+from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
 import yaml
+
+# Per-run Snakemake config files live here, inside each output directory.
+RUN_CONFIG_DIR = ".leukoquant_runs"
+
+
+def write_run_config(record_path, config: Dict[str, object]) -> str:
+    """Write this run's Snakemake config and return the path to hand Snakemake.
+
+    Every job Snakemake submits re-reads the config file by path when it
+    STARTS (its command carries --configfiles <path>), possibly hours or days
+    after submission. Writing each run's config to the same fixed file in the
+    output directory therefore let a later run silently change the config of
+    an earlier run's still-queued jobs -- including their subject list, so
+    those jobs no longer matched their own targets and failed at start. This
+    happened on EPAD 2026-09-27: a 94-session rerun rewrote
+    process_all_config.yaml and every queued job of the main run failed.
+
+    So the config Snakemake reads is a per-run file,
+    <dir>/.leukoquant_runs/<name>_<timestamp>_<random>.yaml, that no later
+    run touches. `record_path` (e.g. <dir>/process_all_config.yaml) is still
+    written too, as the record of the latest run's settings that people and
+    analysis code read. Nothing a running pipeline depends on reads it.
+    """
+    record_path = Path(record_path)
+    run_dir = record_path.parent / RUN_CONFIG_DIR
+    run_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    run_path = run_dir / f"{record_path.stem}_{stamp}_{uuid.uuid4().hex[:8]}.yaml"
+    with open(run_path, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+    # Record copy: temp file + rename, so a reader never sees a partial file.
+    tmp = record_path.with_name(f".{record_path.name}.tmp{os.getpid()}")
+    with open(tmp, "w") as f:
+        yaml.dump(config, f, default_flow_style=False)
+    os.replace(tmp, record_path)
+    return str(run_path)
 
 
 def load_yaml_config(config_path: Optional[str]) -> Dict[str, object]:
@@ -68,7 +107,10 @@ def add_rerun_triggers_args(snakemake_cmd: List[str]) -> None:
     since the underlying risk (a routine edit to any rule's workflow file)
     isn't specific to any one tool.
     """
-    snakemake_cmd.extend(["--rerun-triggers", "mtime"])
+    # "=" form on purpose: --rerun-triggers takes one or more values, so the
+    # space-separated form also swallows a following positional target such as
+    # "all" ("invalid choice: 'all'"), which broke every standalone processor.
+    snakemake_cmd.append("--rerun-triggers=mtime")
 
 
 def add_forcerun_args(snakemake_cmd: List[str], force_rules: Optional[List[str]]) -> None:

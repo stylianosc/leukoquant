@@ -311,7 +311,7 @@ rule run_gif:
         # FLAIR is declared as a Snakemake input (and bound into the container)
         # so it is available at {params.flair_sing} for future use - e.g. to
         # concatenate T1+FLAIR into a 4D input once GIF supports multi-channel.
-        bash {params.gif_script} \
+        run_with_peak_mem "gif" bash {params.gif_script} \
             --filename "$primary_img" \
             --output-folder "$scratch_intermediate" \
             --threads {threads} \

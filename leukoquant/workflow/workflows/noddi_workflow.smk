@@ -197,7 +197,7 @@ rule noddi:
         echo "Running NODDI fitting..."
         noddi_cmd="python /leukoquant/leukoquant/external/noddi/run_noddi.py --dwi $dwi_output --bvecs $bvecs_output --bvals $bvals_output --outdir $outputs_dir --scratch $scratch_work_dir $mask_arg"
         echo "Command: $noddi_cmd"
-        $noddi_cmd
+        run_with_peak_mem "noddi" $noddi_cmd
 
         # Handle intermediate files (keep or discard based on flag).
         # run_noddi.py now writes all intermediates (scheme.txt, binarized_mask.nii.gz,

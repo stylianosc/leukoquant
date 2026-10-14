@@ -59,7 +59,8 @@ from snakemake_executor_plugin_sge import ExecutorSettings as SgeExecutorSetting
 from leukoquant.utils.subject_utils import read_subjects, resolve_subject_pattern
 from leukoquant.utils.external_utils import _resolve_gif_home, _resolve_fs_license
 from leukoquant.utils.bind_utils import consolidate_bind_entries
-from leukoquant.utils.snakemake_utils import load_yaml_config, first_truthy
+from leukoquant.utils.snakemake_utils import load_yaml_config, first_truthy, write_run_config
+from leukoquant.utils.dwi_utils import check_input_failure_marker
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +112,19 @@ def _is_nifti(path: Path) -> bool:
     """
     name = path.name.lower()
     return name.endswith('.nii.gz') or name.endswith('.nii')
+
+
+def queue_with_healthy(subjects: List[str], healthy_subs: List[str]) -> List[str]:
+    """Subject queue for a process-all run: the requested subjects plus the healthy reference cohort.
+
+    The healthy sessions are always queued (normal and forced runs alike) so every stage they feed is built before
+    the z-score step uses them. Their own metrics and z-scores are not produced: the workflow only targets those
+    for the non-healthy subjects (see config_metrics in process_all_workflow.smk)."""
+    queue = list(subjects)
+    for hs in healthy_subs:
+        if hs not in queue:
+            queue.append(hs)
+    return queue
 
 
 class ProcessAllProcessor:
@@ -169,7 +183,8 @@ class ProcessAllProcessor:
                         parcellation: str = "freesurfer",
                         force_rules: Optional[List[str]] = None,
                         verbose: bool = False,
-                        use_gpu: bool = False) -> Tuple[str, str]:
+                        use_gpu: bool = False,
+                        retry_input_failures: bool = False) -> Tuple[str, str]:
         """Run process-all for one or more subjects in a single Snakemake call.
 
         All subjects share one DAG-build pass and one container-discovery step,
@@ -189,14 +204,14 @@ class ProcessAllProcessor:
 
         # If healthy list is provided, ensure those subjects are in the processing queue
         # so Snakemake can build their metrics before z-score calculation uses them.
+        # Built for normal and forced runs alike, but only up to the stages the z-score step reads:
+        # their own metrics and z-scores are not targeted (config_metrics gets target_subjects).
         healthy_list_resolved = None
         healthy_subs: List[str] = []
         if healthy_list:
             healthy_list_resolved = str(Path(healthy_list).resolve())
             healthy_subs = read_subjects(healthy_list_resolved)
-            for hs in healthy_subs:
-                if hs not in subjects:
-                    subjects.append(hs)
+            subjects = queue_with_healthy(subjects, healthy_subs)
 
         # target_subjects = all subjects minus the healthy cohort
         healthy_set = set(healthy_subs)
@@ -243,7 +258,26 @@ class ProcessAllProcessor:
         if healthy_list:
             self._register_file_bind(Path(healthy_list).resolve(), "zscore", zscore_dir_map, bind_entries)
 
-        for i, subject in enumerate(subjects):
+        resolved_subjects: List[str] = []
+        for subject in subjects:
+            # Check for input checks failure marker (e.g. invalid DWI / missing directions)
+            cands = []
+            try:
+                res = resolve_subject_pattern(dwi_pattern, subject, all=True)
+                cands = [res] if isinstance(res, str) else list(res)
+            except Exception:
+                pass
+
+            if check_input_failure_marker(
+                session_dir=base_out / subject,
+                raw_input_paths=cands,
+                retry=retry_input_failures,
+                subject=subject,
+            ):
+                continue
+
+            subj_idx = len(resolved_subjects)
+
             # T1 and FLAIR: take the first match (single file per session).
             t1    = resolve_subject_pattern(t1_pattern,    subject)
             flair = resolve_subject_pattern(flair_pattern, subject)
@@ -260,13 +294,13 @@ class ProcessAllProcessor:
             # entries exhaust the process's open file-descriptor limit on large cohorts.
             subj_dir_map: dict[str, str] = {}
 
-            t1_sing    = self._register_file_bind(t1_p,    i, subj_dir_map, bind_entries)
-            flair_sing = self._register_file_bind(flair_p, i, subj_dir_map, bind_entries)
+            t1_sing    = self._register_file_bind(t1_p,    subj_idx, subj_dir_map, bind_entries)
+            flair_sing = self._register_file_bind(flair_p, subj_idx, subj_dir_map, bind_entries)
 
             mask_sing = ""
             if mask:
                 mask_p = Path(mask).absolute()
-                mask_sing = self._register_file_bind(mask_p, i, subj_dir_map, bind_entries)
+                mask_sing = self._register_file_bind(mask_p, subj_idx, subj_dir_map, bind_entries)
 
             # DWI: collect ALL matching files; filter by bvec/bval presence.
             dwi_candidates: List[str] = resolve_subject_pattern(dwi_pattern, subject, all=True)  # type: ignore[assignment]
@@ -286,12 +320,12 @@ class ProcessAllProcessor:
             # (backward compatibility with callers that pass separate patterns).
             if len(dwi_candidates) == 1 and (bvecs_pattern or bvals_pattern):
                 dwi_p = Path(dwi_candidates[0]).absolute()
-                dwi_sing = self._register_file_bind(dwi_p, i, subj_dir_map, bind_entries)
+                dwi_sing = self._register_file_bind(dwi_p, subj_idx, subj_dir_map, bind_entries)
                 # JSON sidecar lives in the same BIDS directory as the DWI; registering it
                 # reuses the existing directory bind entry rather than adding a new one.
                 json_p = dwi_p.with_name(dwi_p.name.split(".")[0] + ".json")
                 if json_p.exists():
-                    self._register_file_bind(json_p, i, subj_dir_map, bind_entries)
+                    self._register_file_bind(json_p, subj_idx, subj_dir_map, bind_entries)
 
                 bvecs = _resolve_optional(bvecs_pattern, subject)
                 bvals = _resolve_optional(bvals_pattern,  subject)
@@ -299,12 +333,12 @@ class ProcessAllProcessor:
                 bvec_sing = ""
                 if bvecs:
                     bvec_p = Path(bvecs).absolute()
-                    bvec_sing = self._register_file_bind(bvec_p, i, subj_dir_map, bind_entries)
+                    bvec_sing = self._register_file_bind(bvec_p, subj_idx, subj_dir_map, bind_entries)
 
                 bval_sing = ""
                 if bvals:
                     bval_p = Path(bvals).absolute()
-                    bval_sing = self._register_file_bind(bval_p, i, subj_dir_map, bind_entries)
+                    bval_sing = self._register_file_bind(bval_p, subj_idx, subj_dir_map, bind_entries)
 
                 subj_dwi.append(str(dwi_p))
                 subj_bvec.append(bvecs)
@@ -336,9 +370,9 @@ class ProcessAllProcessor:
                         # so registering it typically reuses the existing bind entry.
                         json_p = dwi_p.with_name(stem + ".json")
                         if json_p.exists():
-                            self._register_file_bind(json_p, i, subj_dir_map, bind_entries)
-                        bvec_sing = self._register_file_bind(bvec_p, i, subj_dir_map, bind_entries)
-                        bval_sing = self._register_file_bind(bval_p, i, subj_dir_map, bind_entries)
+                            self._register_file_bind(json_p, subj_idx, subj_dir_map, bind_entries)
+                        bvec_sing = self._register_file_bind(bvec_p, subj_idx, subj_dir_map, bind_entries)
+                        bval_sing = self._register_file_bind(bval_p, subj_idx, subj_dir_map, bind_entries)
                         bvec_host = str(bvec_p)
                         bval_host = str(bval_p)
                     else:
@@ -349,7 +383,7 @@ class ProcessAllProcessor:
                         bvec_host = ""
                         bval_host = ""
 
-                    dwi_sing = self._register_file_bind(dwi_p, i, subj_dir_map, bind_entries)
+                    dwi_sing = self._register_file_bind(dwi_p, subj_idx, subj_dir_map, bind_entries)
 
                     subj_dwi.append(str(dwi_p))
                     subj_bvec.append(bvec_host)
@@ -365,6 +399,7 @@ class ProcessAllProcessor:
                         f"sidecar. Pattern: {dwi_pattern}"
                     )
 
+            resolved_subjects.append(subject)
             t1_files.append(t1)
             flair_files.append(flair)
             dwi_files.append(subj_dwi)
@@ -378,6 +413,13 @@ class ProcessAllProcessor:
             bvecs_sing_paths.append(subj_bvec_sing)
             bvals_sing_paths.append(subj_bval_sing)
             mask_sing_paths.append(mask_sing)
+
+        subjects = resolved_subjects
+        if not subjects:
+            logger.warning("No subjects remain to process after input failure checks.")
+            return ("", str(base_out))
+
+        target_subjects = [s for s in subjects if s not in healthy_set]
 
         # ── Consolidate per-subject input binds to a single common-ancestor bind ──
         # Reduces O(subjects × modalities) directory entries to O(1) by finding
@@ -414,6 +456,26 @@ class ProcessAllProcessor:
         # (one per filesystem root plus shared dirs), so the --bind string is short
         # enough to pass directly via --apptainer-args without hitting ARG_MAX.
         singularity_bind = "--bind " + ",".join(bind_entries)
+        # Singularity auto-mounts the host's /tmp into every container by
+        # default (singularity.conf: "mount tmp = yes"), and that auto-bind
+        # races Snakemake's own post-run cleanup of its per-job tmp dir
+        # (workflow.py's self._snakemake_tmp_dir, which contains a
+        # "source-cache" subfolder): the container's auto-bind of /tmp can
+        # still be tearing down when Snakemake's atexit rmtree runs a few ms
+        # later, producing a spurious "OSError: [Errno 16] Device or
+        # resource busy: 'source-cache'" traceback after the rule has
+        # already finished and written its real output.
+        #
+        # --no-mount tmp alone (2026-09-23) removed that race but wrongly
+        # assumed nothing else needed a writable /tmp inside the container --
+        # metrics_calc.sh's mktemp call does, and failed immediately with
+        # "Read-only file system" for every stage once deployed (caught the
+        # same day from a real EPAD metrics_gif job finishing suspiciously
+        # fast). Disabling the auto-mount AND explicitly binding a real
+        # writable directory to /tmp keeps both fixes: the container still
+        # never touches the host's actual /tmp (source-cache race stays
+        # fixed), but /tmp itself is real and writable (mktemp works again).
+        singularity_bind += f" --no-mount tmp --bind {str(scratch_dir.absolute())}:/tmp"
         if use_gpu:
             singularity_bind += " --nv"
 
@@ -452,11 +514,17 @@ class ProcessAllProcessor:
             "parcellations": [p.strip() for p in parcellation.split(",") if p.strip()]
                               if isinstance(parcellation, str) else list(parcellation),
             "use_gpu": use_gpu,
+            # The rules this run forces (--forcerun below). Snakemake reruns a
+            # forced job but gives the job itself no way to know it was forced;
+            # rules whose scripts skip already-existing outputs (z-score) read
+            # this to recompute them instead.
+            "force_rules": list(force_rules or []),
         }
 
         config_file = str(base_out / "process_all_config.yaml")
-        with open(config_file, "w") as f:
-            yaml.dump(config_dict, f, default_flow_style=False)
+        # Snakemake reads this run's own copy; config_file's fixed name is only
+        # the record of the latest run (see write_run_config).
+        config_file = write_run_config(config_file, config_dict)
 
         # ── Run via Snakemake Python API ─────────────────────────────────────
         # Using the API runs Snakemake in-process rather than via subprocess.
@@ -703,7 +771,8 @@ def apply_process_all(subject_input: Optional[str] = None,
                       force_rules: Optional[List[str]] = None,
                       verbose: bool = False,
                       config_yaml: Optional[str] = None,
-                      gpu: bool = False) -> dict:
+                      gpu: bool = False,
+                      retry_input_failures: bool = False) -> dict:
     """Run the full process-all pipeline and return a summary dict.
 
     CLI / caller arguments take priority over values in ``config_yaml`` when
@@ -722,6 +791,7 @@ def apply_process_all(subject_input: Optional[str] = None,
     cores_raw     = first_truthy(cores,         yaml_cfg.get("cores"))
     cores         = int(cores_raw) if cores_raw is not None else 1
     skip_zscore   = bool(yaml_cfg.get("skip_zscore", False)) or bool(skip_zscore)
+    retry_input_failures = bool(yaml_cfg.get("retry_input_failures", False)) or bool(retry_input_failures)
     healthy_list  = first_truthy(healthy_list,  yaml_cfg.get("healthy_list"), yaml_cfg.get("healthy_subjects_list"))
     demographics  = first_truthy(demographics,  yaml_cfg.get("demographics"), yaml_cfg.get("demographics_csv"))
     covariates    = first_truthy(covariates,    yaml_cfg.get("covariates"))
@@ -766,6 +836,7 @@ def apply_process_all(subject_input: Optional[str] = None,
             force_rules=force_rules,
             verbose=verbose,
             use_gpu=gpu,
+            retry_input_failures=retry_input_failures,
         )
         print("✅ Full processing job submitted successfully", flush=True)
         return {"success": True, "results_dir": results_dir}

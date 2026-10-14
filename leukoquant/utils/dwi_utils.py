@@ -16,6 +16,7 @@ cannot be produced.
 
 from __future__ import annotations
 
+import collections
 import gzip
 import os
 import shutil
@@ -60,24 +61,288 @@ def _find_sidecars(folder: Path, stem: Optional[str] = None) -> (Optional[Path],
     return (bvecs[0] if bvecs else None), (bvals[0] if bvals else None)
 
 
-def _run_dcm2niix(dcm2niix_exec: str, src_dir: Path, out_dir: Path, verbose: bool = False) -> None:
-    exec_path = Path(dcm2niix_exec)
-    if not exec_path.exists():
-        raise FileNotFoundError(f"dcm2niix executable not found at: {dcm2niix_exec}")
-    if not exec_path.is_file():
-        raise RuntimeError(f"dcm2niix path is not a file: {dcm2niix_exec}")
-    if not os.access(str(exec_path), os.X_OK):
-        raise RuntimeError(
-            f"dcm2niix at {dcm2niix_exec} is not executable.\n"
-            "Make it executable (chmod +x ...) or install dcm2niix in your PATH and omit dcm2niix_path."
-        )
+# A diffusion tensor needs at least 6 directions; b0 volumes do not count.
+MIN_DW_VOLUMES = 6
 
-    cmd = [str(exec_path), '-z', 'y', '-b', 'y', '-o', str(out_dir), str(src_dir)]
-    if verbose:
-        print(f"Running dcm2niix: {' '.join(cmd)}")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
-    if proc.returncode != 0:
-        raise RuntimeError(f"dcm2niix failed (rc={proc.returncode}). stderr: {proc.stderr}")
+
+class InputDataError(ValueError):
+    """The raw DWI itself is unusable (as opposed to a transient or environment
+    failure). Only this error type leaves a failure marker, so a one-off disk
+    or network problem can never get a healthy session skipped for good."""
+
+
+def _find_converter_candidates(dcm2niix_primary: Optional[str] = None) -> list[tuple[str, str]]:
+    """Return an ordered list of (converter_name, executable_path) to try.
+
+    Discovers converters portably without machine-specific hardcoded paths:
+      1. Primary dcm2niix (explicit path, module-relative external/noddi, or PATH)
+      2. Rebuilt dcm2niix_nonspatial (module-relative external/noddi or PATH)
+      3. FreeSurfer mri_convert (PATH or FREESURFER_HOME/bin)
+    """
+    candidates: list[tuple[str, str]] = []
+
+    # Module-relative path to external/noddi
+    module_noddi = Path(__file__).resolve().parent.parent / "external" / "noddi"
+
+    # 1. Primary dcm2niix
+    p = None
+    if dcm2niix_primary and Path(dcm2niix_primary).is_file() and os.access(dcm2niix_primary, os.X_OK):
+        p = dcm2niix_primary
+    elif (module_noddi / "dcm2niix").is_file() and os.access(module_noddi / "dcm2niix", os.X_OK):
+        p = str(module_noddi / "dcm2niix")
+    elif shutil.which("dcm2niix"):
+        p = shutil.which("dcm2niix")
+
+    if p:
+        candidates.append(("dcm2niix", p))
+
+    # 2. Rebuilt dcm2niix_nonspatial
+    nonspatial_candidates = []
+    if dcm2niix_primary:
+        nonspatial_candidates.append(str(Path(dcm2niix_primary).parent / "dcm2niix_nonspatial"))
+    nonspatial_candidates.append(str(module_noddi / "dcm2niix_nonspatial"))
+    if shutil.which("dcm2niix_nonspatial"):
+        nonspatial_candidates.append(shutil.which("dcm2niix_nonspatial"))
+
+    for nsc in nonspatial_candidates:
+        if nsc and Path(nsc).is_file() and os.access(nsc, os.X_OK):
+            candidates.append(("dcm2niix_nonspatial", nsc))
+            break
+
+    # 3. FreeSurfer mri_convert
+    mc_candidates = []
+    if shutil.which("mri_convert"):
+        mc_candidates.append(shutil.which("mri_convert"))
+    fs_home = os.environ.get("FREESURFER_HOME")
+    if fs_home:
+        mc_candidates.append(str(Path(fs_home) / "bin" / "mri_convert"))
+
+    for mc in mc_candidates:
+        if mc and Path(mc).is_file() and os.access(mc, os.X_OK):
+            candidates.append(("mri_convert", mc))
+            break
+
+    return candidates
+
+
+def _extract_dicom_slice_location(dcm_path: Path) -> Optional[float]:
+    """Slice position of a DICOM file: SliceLocation, else the z of ImagePositionPatient.
+
+    Reads the header only (no pixel data). Returns None for files that are not
+    readable DICOMs or carry neither tag.
+    """
+    import pydicom
+
+    try:
+        ds = pydicom.dcmread(str(dcm_path), stop_before_pixels=True,
+                             specific_tags=["SliceLocation", "ImagePositionPatient"])
+        if "SliceLocation" in ds:
+            return round(float(ds.SliceLocation), 3)
+        if "ImagePositionPatient" in ds:
+            return round(float(ds.ImagePositionPatient[2]), 3)
+    except Exception:  # not a DICOM, or a malformed header: treat as unlocatable
+        pass
+    return None
+
+
+def _filter_incomplete_slices(src_dir: Path) -> Path:
+    """Detect and remove partial/trailing volume slices from an aborted acquisition.
+
+    If an acquisition was interrupted midway through a volume, some slice locations
+    will have fewer files than the complete volumes. dcm2niix will reject such datasets
+    as inconsistent or non-spatial. Filtering out trailing slices restores volume consistency.
+
+    Returns the directory to use (either src_dir or a temporary directory with symlinks).
+    """
+    # Use rglob to find all DICOMs recursively; convert to a list of unique
+    # resolved paths (dict preserves insertion order, deduplication is via key lookup).
+    seen: dict[Path, None] = {}
+    for p in src_dir.rglob("*.dcm"):
+        seen[p.resolve()] = None
+    dcms: list[Path] = list(seen.keys())
+    if not dcms:
+        # No .dcm extension: treat all non-hidden files as potential DICOMs
+        for p in src_dir.rglob("*"):
+            if p.is_file() and not p.name.startswith("."):
+                seen[p.resolve()] = None
+        dcms = list(seen.keys())
+
+    if len(dcms) < 20:
+        return src_dir
+
+    loc_counts: collections.Counter[float] = collections.Counter()
+    file_locs: list[tuple[Path, Optional[float]]] = []
+    for d in dcms:
+        loc = _extract_dicom_slice_location(d)
+        file_locs.append((d, loc))
+        if loc is not None:
+            loc_counts[loc] += 1
+
+    if not loc_counts:
+        return src_dir
+
+    counts_freq = collections.Counter(loc_counts.values())
+    expected_vol_count = counts_freq.most_common(1)[0][0]
+
+    # Check if there are slice locations with partial volumes
+    outliers = {loc for loc, count in loc_counts.items() if count < expected_vol_count}
+    if not outliers:
+        return src_dir
+
+    logger.warning(
+        "Detected incomplete volume slices in %s! %d slice locations have partial acquisitions. "
+        "Creating filtered view with complete volumes only (%d full volumes).",
+        src_dir,
+        len(outliers),
+        expected_vol_count,
+    )
+    filtered_dir = Path(tempfile.mkdtemp(prefix="filtered_dcm_"))
+    kept = 0
+    # Keep up to expected_vol_count files per valid slice location
+    loc_seen: collections.Counter[float] = collections.Counter()
+    for d, loc in file_locs:
+        if loc is not None and loc not in outliers:
+            if loc_seen[loc] < expected_vol_count:
+                loc_seen[loc] += 1
+                (filtered_dir / d.name).symlink_to(d.resolve())
+                kept += 1
+    logger.info("Filtered %d partial/excess slices; retained %d complete slices.", len(dcms) - kept, kept)
+    return filtered_dir
+
+
+def _convert_dicom_with_fallback(
+    src_dir: Path,
+    out_dir: Path,
+    dcm2niix_path: Optional[str] = None,
+    verbose: bool = False,
+) -> tuple[Path, Optional[Path], Optional[Path]]:
+    """Convert a DICOM directory to NIfTI with sidecars using a fallback chain.
+
+    Fallback sequence:
+      1. dcm2niix (standard)
+      2. dcm2niix_nonspatial (built with -DmyInstanceNumberOrderIsNotSpatial)
+      3. mri_convert (FreeSurfer)
+
+    Also handles incomplete acquisitions (aborted scans with partial slice sets)
+    by filtering trailing slices if standard conversion fails.
+
+    Validates that the converted volume is not a corrupted 3D slice-dump when
+    b-values indicate a multi-volume 4D DWI acquisition.
+
+    Returns:
+        (dwi_nii_path, bvec_path, bval_path)
+    """
+    candidates = _find_converter_candidates(dcm2niix_path)
+    if not candidates:
+        raise RuntimeError("No DICOM converter found (checked dcm2niix, dcm2niix_nonspatial, mri_convert).")
+
+    errors: list[str] = []
+
+    # First pass: try conversion directly on src_dir
+    # Second pass: if dcm2niix failed with spatial/ordering or slice count errors, try filtering incomplete slices
+    filtered_dir: Optional[Path] = None
+
+    for attempt_dir in [src_dir, "FILTERED"]:
+        current_src = attempt_dir
+        if attempt_dir == "FILTERED":
+            filtered_dir = _filter_incomplete_slices(src_dir)
+            if filtered_dir == src_dir:
+                break
+            current_src = filtered_dir
+
+        for name, exec_path in candidates:
+            logger.info("Attempting DICOM conversion with %s (%s) on %s", name, exec_path, current_src)
+
+            # Clean out_dir before each attempt to avoid mixing partial outputs
+            for child in out_dir.iterdir():
+                if child.is_file() or child.is_symlink():
+                    child.unlink()
+                elif child.is_dir():
+                    shutil.rmtree(child, ignore_errors=True)
+
+            try:
+                if name in ("dcm2niix", "dcm2niix_nonspatial"):
+                    cmd = [exec_path, "-z", "y", "-b", "y", "-o", str(out_dir), str(current_src)]
+                    if verbose:
+                        print(f"Running {name}: {' '.join(cmd)}")
+                    proc = subprocess.run(cmd, capture_output=True, text=True)
+                    if proc.returncode != 0:
+                        raise RuntimeError(f"{name} exited with code {proc.returncode}. stderr: {proc.stderr.strip()}")
+
+                elif name == "mri_convert":
+                    dcms = sorted(current_src.glob("*.dcm")) + sorted(current_src.rglob("*.dcm"))
+                    if not dcms:
+                        dcms = [f for f in current_src.rglob("*") if f.is_file()]
+                    if not dcms:
+                        raise FileNotFoundError(f"No DICOM files found in {current_src} for mri_convert")
+                    first_dcm = dcms[0]
+                    out_nii = out_dir / "data.nii.gz"
+                    cmd = [exec_path, str(first_dcm), str(out_nii)]
+                    if verbose:
+                        print(f"Running mri_convert: {' '.join(cmd)}")
+                    env = os.environ.copy()
+                    if "FREESURFER_HOME" not in env:
+                        cand_fs_home = Path(exec_path).resolve().parent.parent
+                        if (cand_fs_home / "bin" / "mri_convert").is_file():
+                            env["FREESURFER_HOME"] = str(cand_fs_home)
+                    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+                    if proc.returncode != 0:
+                        raise RuntimeError(f"mri_convert exited with code {proc.returncode}. stderr: {proc.stderr.strip()}")
+
+                # Find produced NIfTI files
+                niis = list(out_dir.glob("*.nii.gz")) + list(out_dir.glob("*.nii"))
+                if not niis:
+                    raise FileNotFoundError(f"{name} produced no NIfTI files.")
+                dwi_cand = niis[0]
+
+                # Find sidecars in out_dir
+                bvec_cand, bval_cand = _find_sidecars(out_dir)
+
+                # Validate converted image structure
+                import nibabel as nib
+                img = nib.load(str(dwi_cand))
+
+                # A DWI without gradient tables is unusable (mri_convert writes
+                # the image only), so it must not count as a successful conversion.
+                if not (bval_cand and bval_cand.exists() and bvec_cand and bvec_cand.exists()):
+                    raise InputDataError(f"{name} produced no bval/bvec files.")
+
+                if bval_cand and bval_cand.exists():
+                    try:
+                        bvals_arr = np.loadtxt(str(bval_cand)).reshape(-1)
+                        n_bvals = len(bvals_arr)
+                        if img.ndim < 4 and n_bvals > 1:
+                            raise InputDataError(
+                                f"Corrupted conversion: image is {img.ndim}D {img.shape} "
+                                f"but {n_bvals} b-values were extracted (all slices stacked into 3D)."
+                            )
+                        if img.ndim >= 4 and img.shape[-1] != n_bvals:
+                            raise InputDataError(
+                                f"Volume mismatch: image has {img.shape[-1]} volumes but {n_bvals} b-values."
+                            )
+                    except Exception as val_err:
+                        if isinstance(val_err, InputDataError):
+                            raise
+                        logger.debug("Could not parse bvals for validation: %s", val_err)
+
+                logger.info("DICOM conversion succeeded using %s: %s", name, dwi_cand.name)
+                if filtered_dir and filtered_dir != src_dir and filtered_dir.exists():
+                    shutil.rmtree(filtered_dir, ignore_errors=True)
+                return dwi_cand, bvec_cand, bval_cand
+
+            except Exception as e:
+                logger.warning("Conversion with %s failed: %s", name, e)
+                errors.append(f"{name} (attempt on {current_src.name}): {e}")
+
+    if filtered_dir and filtered_dir != src_dir and filtered_dir.exists():
+        shutil.rmtree(filtered_dir, ignore_errors=True)
+
+    raise InputDataError("All DICOM converters failed:\n" + "\n".join(f"  - {err}" for err in errors))
+
+
+def _run_dcm2niix(dcm2niix_exec: str, src_dir: Path, out_dir: Path, verbose: bool = False) -> None:
+    """Run DICOM conversion with fallback chain (retaining legacy function signature)."""
+    _convert_dicom_with_fallback(src_dir, out_dir, dcm2niix_path=dcm2niix_exec, verbose=verbose)
 
 
 def _standardize_bvals(bvals: np.ndarray) -> np.ndarray:
@@ -306,26 +571,149 @@ def drop_volumes(dwi_path: str, bvecs_path: str, bvals_path: str, indices) -> No
     )
 
 
+def _record_input_failure(session_dir: Path, error_msg: str, source: str = "") -> None:
+    """Atomically write <session_dir>/input_checks/dwi_failed.txt.
+
+    session_dir must be the session's permanent output folder (the one
+    process-all looks in), not node scratch, which is deleted when the job ends.
+    Written via a temp file + os.replace so a reader sees either no marker or a
+    complete one; concurrent writers (GIF and FreeSurfer TRACULA checking the
+    same DWI) write the same content, so the last one landing is harmless.
+    """
+    try:
+        checks_dir = Path(session_dir) / "input_checks"
+        checks_dir.mkdir(parents=True, exist_ok=True)
+        marker_path = checks_dir / "dwi_failed.txt"
+        tmp_marker = checks_dir / f".tmp_{os.getpid()}_dwi_failed.txt"
+        with open(tmp_marker, "w") as f:
+            f.write(f"{error_msg.strip()}\n")
+            if source:
+                f.write(f"input: {source}\n")
+        os.replace(tmp_marker, marker_path)
+        logger.warning("Recorded DWI input failure marker at %s", marker_path)
+    except OSError as exc:
+        # The marker is an optimisation; failing to write it must not hide the real error.
+        logger.warning("Could not record input check marker in %s: %s", session_dir, exc)
+
+
+def check_input_failure_marker(
+    session_dir: Path | str,
+    raw_input_paths: Optional[list[Path | str]] = None,
+    retry: bool = False,
+    subject: str = "",
+) -> bool:
+    """Check if session should be skipped due to a previous DWI input check failure.
+
+    Inspects `<session_dir>/input_checks/dwi_failed.txt`.
+
+    Parameters
+    ----------
+    session_dir : Path or str
+        Base output directory for the session/subject (contains `input_checks/`).
+    raw_input_paths : list of (Path or str), optional
+        List of raw DWI input candidate paths. If any existing file is newer than
+        the failure marker, the marker is treated as stale, removed, and the session
+        is retried.
+    retry : bool, default False
+        If True (e.g. `--retry-input-failures`), existing failure markers are removed
+        and the session is not skipped.
+    subject : str, optional
+        Subject identifier for logging messages (defaults to directory name if empty).
+
+    Returns
+    -------
+    bool
+        True if the session should be skipped, False if processing should proceed.
+    """
+    session_path = Path(session_dir)
+    subj_marker = session_path / "input_checks" / "dwi_failed.txt"
+    if not subj_marker.is_file():
+        return False
+
+    subj_label = subject or session_path.name
+
+    if retry:
+        logger.info(
+            "Subject '%s': retrying despite previous failure marker (--retry-input-failures)",
+            subj_label,
+        )
+        try:
+            subj_marker.unlink()
+        except OSError:
+            pass
+        return False
+
+    # Check if raw input files are newer than the marker
+    try:
+        marker_mtime = subj_marker.stat().st_mtime
+        if raw_input_paths:
+            for cand in raw_input_paths:
+                p = Path(cand)
+                if p.exists() and p.stat().st_mtime > marker_mtime:
+                    logger.info(
+                        "Subject '%s': DWI input is newer than failure marker; removing marker and retrying.",
+                        subj_label,
+                    )
+                    try:
+                        subj_marker.unlink()
+                    except OSError:
+                        pass
+                    return False
+    except Exception:
+        pass
+
+    reason = ""
+    try:
+        reason = subj_marker.read_text().strip()
+    except Exception:
+        pass
+
+    logger.warning(
+        "Skipping subject '%s': previously failed DWI input checks (%s). "
+        "Use --retry-input-failures to reprocess.",
+        subj_label,
+        reason or "dwi_failed.txt",
+    )
+    return True
+
+
 def prepare_dwi_input(dwi_input: str,
                       bvecs: Optional[str] = None,
                       bvals: Optional[str] = None,
                       output_dir: Optional[str] = None,
-                      verbose: bool = False) -> Dict[str, Optional[str]]:
+                      verbose: bool = False,
+                      dcm2niix_path: Optional[str] = None,
+                      session_dir: Optional[str] = None) -> Dict[str, Optional[str]]:
     """Prepare DWI, bvec and bval files from a variety of inputs.
 
-    Returns a dict: { 'dwi': <path>, 'bvecs': <path>, 'bvals': <path>, 'tempdir': <path or None> }
+    session_dir: the session's permanent output folder. When given and the raw
+    DWI is unusable (InputDataError), a failure marker is written there so
+    process-all skips the session next time. Other errors never leave a marker.
+
+    Returns a dict: { 'dwi': <path>, 'bvecs': <path>, 'bvals': <path>, 'output_dir': <path> }
 
     Raises FileNotFoundError or RuntimeError on failure.
     """
+    try:
+        return _prepare_dwi_input_impl(dwi_input, bvecs, bvals, output_dir, verbose, dcm2niix_path=dcm2niix_path)
+    except InputDataError as exc:
+        if session_dir:
+            _record_input_failure(Path(session_dir), str(exc), source=str(dwi_input))
+        raise
+
+
+def _prepare_dwi_input_impl(dwi_input: str,
+                            bvecs: Optional[str] = None,
+                            bvals: Optional[str] = None,
+                            output_dir: Optional[str] = None,
+                            verbose: bool = False,
+                            dcm2niix_path: Optional[str] = None) -> Dict[str, Optional[str]]:
     input_p = Path(dwi_input)
     output_dir_path = Path(output_dir) if output_dir else input_p.parent
 
     # Only DICOM inputs (.zip archive or directory, both handled further
-    # below) ever need dcm2niix -- .nii/.nii.gz inputs never call it. Don't
-    # require the binary to exist up front for every input type; leave the
-    # existence/executable check to _run_dcm2niix itself, which only runs
-    # when a DICOM branch is actually taken.
-    dcm2niix_path = str(Path("/leukoquant/leukoquant/external/noddi/dcm2niix"))
+    # below) ever need dcm2niix -- .nii/.nii.gz inputs never call it.
+    # Converter binaries are discovered portably in _convert_dicom_with_fallback.
 
     if not input_p.exists():
         raise FileNotFoundError(f"DWI input not found: {dwi_input}")
@@ -377,7 +765,7 @@ def prepare_dwi_input(dwi_input: str,
                 bvals = str(bval_found)
 
 
-    # Case: zip -> extract and run dcm2niix on extracted folder
+    # Case: zip -> extract and run converter with fallback on extracted folder
     elif input_p.is_file() and input_p.suffix == '.zip':
         logger.info("DWI input is .zip archive")
         
@@ -390,46 +778,34 @@ def prepare_dwi_input(dwi_input: str,
 
         temp_output_dir = Path(tempfile.mkdtemp())
 
-        # run dcm2niix on extracted folder
-        _run_dcm2niix(dcm2niix_path, extract_dir, temp_output_dir, verbose=verbose)
+        # run converter with fallback on extracted folder
+        dwi_found, bvec_cand, bval_cand = _convert_dicom_with_fallback(
+            extract_dir, temp_output_dir, dcm2niix_path, verbose=verbose
+        )
         
         # Delete extracted folder after use
         shutil.rmtree(extract_dir)
-        
-        # find first nii/nii.gz and sidecars
-        niis = list(temp_output_dir.glob('*.nii.gz'))
-        #logger.info(f"Files produced by dcm2niix: {list(tempdir.glob('*'))}")
-        if not niis:
-            raise FileNotFoundError(f"dcm2niix produced no NIfTI files from {input_p}")
-        dwi = niis[0]
+        dwi = dwi_found
 
-        bvec_candidates = list(temp_output_dir.glob(f"*.bvec"))
-        bval_candidates = list(temp_output_dir.glob(f"*.bval"))
-
-        if not bvecs and bvec_candidates:
-            bvecs = str(bvec_candidates[0])
-        if not bvals and bval_candidates:
-            bvals = str(bval_candidates[0])
+        if not bvecs and bvec_cand:
+            bvecs = str(bvec_cand)
+        if not bvals and bval_cand:
+            bvals = str(bval_cand)
 
 
-    # Case: directory -> assume DICOMs and run dcm2niix
+    # Case: directory -> assume DICOMs and run converter with fallback
     elif input_p.is_dir():
         logger.info("DWI input is a directory (assuming DICOMs)")
         temp_output_dir = Path(tempfile.mkdtemp())
-        _run_dcm2niix(dcm2niix_path, input_p, temp_output_dir, verbose=verbose)
+        dwi_found, bvec_cand, bval_cand = _convert_dicom_with_fallback(
+            input_p, temp_output_dir, dcm2niix_path, verbose=verbose
+        )
+        dwi = dwi_found
 
-        niis = list(temp_output_dir.glob('*.nii.gz'))
-        if not niis:
-            raise FileNotFoundError(f"dcm2niix produced no NIfTI files from DICOM folder {input_p}")
-        dwi = niis[0]
-
-        bvec_candidates = list(temp_output_dir.glob(f"*.bvec"))
-        bval_candidates = list(temp_output_dir.glob(f"*.bval"))
-
-        if not bvecs and bvec_candidates:
-            bvecs = str(bvec_candidates[0])
-        if not bvals and bval_candidates:
-            bvals = str(bval_candidates[0])
+        if not bvecs and bvec_cand:
+            bvecs = str(bvec_cand)
+        if not bvals and bval_cand:
+            bvals = str(bval_cand)
 
     else:
         raise FileNotFoundError(f"Unsupported DWI input: {dwi_input}")
@@ -475,12 +851,38 @@ def prepare_dwi_input(dwi_input: str,
     # the source files came from dcm2niix or TRACULA.
     normalize_bvec_bval_to_fsl(str(final_bvecs), str(final_bvals))
 
+    # Validate final DWI dimensions and b-value consistency before dropping volumes:
+    import nibabel as nib
+    final_img = nib.load(str(final_dwi))
+    if final_img.ndim < 4:
+        raise InputDataError(f"Prepared DWI is not 4D: shape is {final_img.shape}.")
+    if int(np.sum(np.loadtxt(str(final_bvals)).reshape(-1) > 50)) < MIN_DW_VOLUMES:
+        raise InputDataError(
+            f"Prepared DWI has invalid volume count: shape is {final_img.shape} "
+            f"(minimum {MIN_DW_VOLUMES} diffusion-weighted volumes required for tensor reconstruction)."
+        )
+
+    bvals_arr = np.loadtxt(str(final_bvals)).reshape(-1)
+    if len(bvals_arr) != final_img.shape[3]:
+        raise InputDataError(
+            f"Volume count mismatch: DWI image has {final_img.shape[3]} volumes "
+            f"but {len(bvals_arr)} b-values were found."
+        )
+
     # Drop any volume whose gradient direction is missing/corrupted (zero
     # bvec paired with a nonzero bval) - see drop_volumes() docstring for
     # why these are removed outright rather than relabelled as b0.
     mismatched = find_mismatched_bvec_volumes(str(final_bvecs), str(final_bvals))
     if mismatched.size > 0:
         drop_volumes(str(final_dwi), str(final_bvecs), str(final_bvals), mismatched)
+        # Re-verify sufficient volumes remain after dropping corrupted ones
+        final_img = nib.load(str(final_dwi))
+        remaining_bvals = np.loadtxt(str(final_bvals)).reshape(-1)
+        if int(np.sum(remaining_bvals > 50)) < MIN_DW_VOLUMES:
+            raise InputDataError(
+                f"Prepared DWI has insufficient valid volumes after dropping corrupted directions: "
+                f"{final_img.shape[3]} remaining (minimum {MIN_DW_VOLUMES} diffusion-weighted required)."
+            )
 
     logger.info(f"Final prepared files: DWI: {final_dwi}, bvecs: {final_bvecs}, bvals: {final_bvals}")
 
@@ -498,6 +900,8 @@ def main(argv=None):
     p.add_argument('--bvals', required=False, help='bvals file')
     p.add_argument('--outdir', required=True, help='Output directory')
     p.add_argument('--verbose', action='store_true', help='Enable verbose logging')
+    p.add_argument('--session-dir', required=False,
+                   help="Session's permanent output folder; receives input_checks/dwi_failed.txt if the DWI is unusable")
 
     args = p.parse_args(argv)
 
@@ -507,7 +911,7 @@ def main(argv=None):
 
     logging.info(f"Preparing DWI input from {args.dwi} with bvecs {args.bvecs} and bvals {args.bvals}")
 
-    paths_dict = prepare_dwi_input(args.dwi, args.bvecs, args.bvals, args.outdir)
+    paths_dict = prepare_dwi_input(args.dwi, args.bvecs, args.bvals, args.outdir, session_dir=args.session_dir)
 
     return paths_dict["dwi"], paths_dict["bvecs"], paths_dict["bvals"], paths_dict["output_dir"]
 

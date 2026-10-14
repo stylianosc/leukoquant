@@ -511,7 +511,9 @@ if _include_z_score and _zscore_required_cols and _zscore_demo_csv:
 
 config_metrics = {
     "leukoquant_parent_dir": leukoquant_parent_dir,
-    "subjects": subjects,
+    # The healthy reference cohort is built up to what the z-score step reads (DTI/NODDI maps, tracts, ...) but gets
+    # no metrics tables of its own: no analysis uses them, and forcing the metrics rule must not redo them.
+    "subjects": target_subjects,
     "parcellations": PARCELLATIONS,
     # Enable parcellation-suffixed output folders (metrics-{parcellation}/).
     # Standalone process-metrics leaves this unset (defaults False → metrics/).
@@ -528,6 +530,9 @@ config_metrics = {
     "t1_path": None,
     "dwi_path": None,
     "t1_map":  {s: t1_sing_map[s]  for s in subjects},
+    # Host paths of the same T1 images: the metrics workflow reads their headers at load time to size the
+    # memory request, which the container paths above cannot serve (they only exist inside the container).
+    "t1_host_map": {s: t1_map[s] for s in subjects},
     "dwi_map": {s: f"/output/{s}/tracula-{_primary_parc}/outputs/dmri/dwi.nii.gz" for s in subjects},
     "metrics": {
         "dti_fa":    f"{output_dir}/{{subject}}/dti/outputs:fa.nii.gz:dwi",
@@ -635,6 +640,10 @@ config_z_score = {
     "containers": config.get("containers", {}),
     "singularity_binds": _zscore_binds,
     "use_gpu": config.get("use_gpu", False),
+    # Recompute existing z-score maps when this run forces the z-score rule
+    # (--force z_score_z_score: the module's rules are imported below with the
+    # z_score_ prefix). See "force" in z_score_workflow.smk.
+    "force": "z_score_z_score" in config.get("force_rules", []),
 }
 
 # ── Module imports ────────────────────────────────────────────────────────────

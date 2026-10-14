@@ -200,7 +200,7 @@ rule dti:
         echo "Running DTI fitting..."
         dtifit_cmd="python /leukoquant/leukoquant/utils/reconst_dti.py --dwi $dwi_output --bvecs $bvecs_output --bvals $bvals_output $mask_arg --outdir $outputs_dir $save_intermediate_flag"
         echo "Command: $dtifit_cmd"
-        $dtifit_cmd
+        run_with_peak_mem "dti" $dtifit_cmd
 
         # Move intermediate files to intermediate/ if requested; scratch is cleaned by trap on exit.
         # masked_dwi.nii.gz is only written by reconst_dti.py when --save-intermediate is passed.

@@ -51,7 +51,7 @@ Outputs are written to `{output_dir}/{subject}/z_scores/outputs/`.
 | `--scheduler` | `-s` | `choice` | `local` | No | Execution scheduler: `local` or `sge` |
 | `--cores` | `-c` | `int` | `None` | No | Number of Snakemake cores (default: `1`, or from `--config-yaml`) |
 | `--task-concurrency` | - | `int` | `20` | No | Max concurrently-running SGE array tasks (`-tc`). Each task writes to the shared NFS output tree on its first `mkdir`; raising this too high on `--scheduler sge` can overwhelm the NFS server. |
-| `--force` | - | flag | `False` | No | Force-rerun Z-score computation even if outputs already exist |
+| `--force` | - | flag | `False` | No | Force-rerun Z-score computation, recomputing maps that already exist. (Without it, an existing map is still recomputed if it is older than the demographics CSV or the healthy-subjects list.) |
 | `--verbose` | `-v` | flag | `False` | No | Print Snakemake stdout to the console |
 
 *`--healthy-list`, `--target-list`, and `--output-dir` may be provided via `--config-yaml` instead.

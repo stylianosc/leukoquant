@@ -39,6 +39,9 @@ set -euo pipefail
 #                       Supports: .nii/.nii.gz, DICOM directory, or .zip of DICOMs
 #   --bval-paths        (optional) space-separated bval file paths
 #   --verbose           enable progress/debug logging
+#   --force             recompute z-score maps that already exist (each is
+#                       replaced atomically); without it they are skipped.
+#                       Passed by the workflow when the z-score rule is forced.
 # ------------------------------------------------------------------------------
 
 TARGET_T1=""
@@ -63,6 +66,7 @@ SKIP_SKULLSTRIP_T1=0
 SKIP_SKULLSTRIP_DWI=0
 VERBOSE=0
 PLATF=0
+FORCE=0
 
 # CUDA-enabled NiftyReg build (downloaded on demand by ensure_niftyreg_gpu()
 # only when --gpu is requested; CPU-compatible by default via -platf 0).
@@ -92,6 +96,7 @@ while [[ $# -gt 0 ]]; do
         --skip-skullstrip-t1)  SKIP_SKULLSTRIP_T1=1; shift ;;
         --skip-skullstrip-dwi) SKIP_SKULLSTRIP_DWI=1; shift ;;
         --verbose)         VERBOSE=1;            shift ;;
+        --force)           FORCE=1;              shift ;;
         --platf)           PLATF="$2";            shift 2 ;;
         --dwi-paths)       shift; while [[ $# -gt 0 && "$1" != --* ]]; do DWI_PATHS+=("$1"); shift; done ;;
         --bval-paths)      shift; while [[ $# -gt 0 && "$1" != --* ]]; do BVAL_PATHS+=("$1"); shift; done ;;
@@ -150,6 +155,8 @@ log() {
 }
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+source "$SCRIPT_DIR/bash_utils.sh"
+
 UTILS_SCRIPT="$SCRIPT_DIR/z_score_utils.py"
 if [[ ! -f "$UTILS_SCRIPT" ]]; then
     echo "Error: z_score_utils.py not found at $UTILS_SCRIPT" >&2; exit 1
@@ -158,6 +165,11 @@ fi
 DWI_UTILS_SCRIPT="$SCRIPT_DIR/dwi_utils.py"
 if [[ ! -f "$DWI_UTILS_SCRIPT" ]]; then
     echo "Error: dwi_utils.py not found at $DWI_UTILS_SCRIPT" >&2; exit 1
+fi
+
+IMAGE_UTILS_SCRIPT="$SCRIPT_DIR/image_utils.py"
+if [[ ! -f "$IMAGE_UTILS_SCRIPT" ]]; then
+    echo "Error: image_utils.py not found at $IMAGE_UTILS_SCRIPT" >&2; exit 1
 fi
 
 echo ""
@@ -189,21 +201,8 @@ mkdir -p "$SHARED_CACHE_DIR"
 # is removed: the shared cache above must never be touched here, since its
 # entire purpose is to persist and be reused by every other target's run.
 function finish {
-    echo "Cleaning up scratch directory: $TMP_DIR"
-    # Report usage HERE, before deleting -- this is the trap that actually
-    # removes $TMP_DIR first (it fires before z_score_workflow.smk's own
-    # outer trap gets a chance to run), so any usage report added at the
-    # outer layer instead always measures an already-emptied directory and
-    # reads a meaningless ~0.00 GB (confirmed 2026-08-24: a real, successful
-    # EPAD run's log showed exactly this for both scratch_cleanup calls).
-    if [ -d "$TMP_DIR" ]; then
-        local tmp_dir_size_gb
-        tmp_dir_size_gb=$(du -sb "$TMP_DIR" 2>/dev/null | awk '{printf "%.2f", $1/1024/1024/1024}')
-        if [ -n "$tmp_dir_size_gb" ]; then
-            echo "Scratch usage before cleanup: ${tmp_dir_size_gb} GB"
-        fi
-    fi
-    rm -rf "$TMP_DIR"
+    # Report scratch usage, report peak RSS, and clean up $TMP_DIR
+    scratch_cleanup "$TMP_DIR"
 }
 trap finish EXIT ERR INT TERM
 
@@ -687,10 +686,21 @@ prepare_t1_inputs() {
     HEALTHY_T1_PREP_DIR="$SHARED_CACHE_DIR/t1_prep"
     mkdir -p "$HEALTHY_T1_PREP_DIR"
 
+    # Collapse target T1 to single volume if 4D (no-op if already 3D)
+    TARGET_T1_3D="$T1_PREP_DIR/target_t1_singleframe.nii.gz"
+    python3 "$IMAGE_UTILS_SCRIPT" --input "$TARGET_T1" --output "$TARGET_T1_3D" --op first_frame
+    TARGET_T1="$TARGET_T1_3D"
+
     if [[ "$SKIP_SKULLSTRIP_T1" -eq 1 ]]; then
         echo "  Skipping T1 skull stripping for target and healthy T1s."
         PREPARED_TARGET_T1="$TARGET_T1"
-        PREPARED_HEALTHY_T1S=("${HEALTHY_T1S[@]}")
+        for (( i=0; i<N_HEALTHY; i++ )); do
+            HEALTHY_T1="${HEALTHY_T1S[$i]}"
+            IDX=$(printf "%04d" "$i")
+            HEALTHY_T1_3D="$T1_PREP_DIR/healthy_${IDX}_singleframe.nii.gz"
+            python3 "$IMAGE_UTILS_SCRIPT" --input "$HEALTHY_T1" --output "$HEALTHY_T1_3D" --op first_frame
+            PREPARED_HEALTHY_T1S+=("$HEALTHY_T1_3D")
+        done
         return 0
     fi
 
@@ -717,6 +727,10 @@ prepare_t1_inputs() {
             echo "  [$IDX] [SKIP] Healthy T1 already processed: ${HEALTHY_ID} ($((i+1))/${N_HEALTHY})"
         else
             echo "  [$IDX] Skull stripping healthy T1 for subject: ${HEALTHY_ID} ($((i+1))/${N_HEALTHY})"
+            # Collapse healthy T1 to single volume if 4D before stripping
+            HEALTHY_T1_3D="$T1_PREP_DIR/healthy_${IDX}_singleframe.nii.gz"
+            python3 "$IMAGE_UTILS_SCRIPT" --input "$HEALTHY_T1" --output "$HEALTHY_T1_3D" --op first_frame
+
             # Same race as prepare_dwi_inputs: strip into a job-unique temp
             # file, atomically rename into the shared cache. A regular-file
             # rename() is just as atomic as a directory one, so a losing
@@ -732,7 +746,7 @@ prepare_t1_inputs() {
             # OASIS3/EPAD attempt with FileNotFoundError on the temp path
             # (ADNI3 never hit it -- its healthy IDs are flat, no "/").
             mkdir -p "$(dirname "$HEALTHY_T1_BRAIN_TMP")"
-            extract_brain_t1 "$HEALTHY_T1" "$HEALTHY_T1_BRAIN_TMP"
+            extract_brain_t1 "$HEALTHY_T1_3D" "$HEALTHY_T1_BRAIN_TMP"
             if [[ ! -f "$HEALTHY_T1_BRAIN_TMP" ]]; then
                 echo "ERROR: Skull-stripped healthy T1 not found: $HEALTHY_T1_BRAIN_TMP" >&2
                 exit 1
@@ -1002,6 +1016,13 @@ qc_register_nodiff_to_t1_folder() {
             echo "ERROR: nodiff QC output missing: $NODIFF_IN_TARGET_T1" >&2
             exit 1
         fi
+        # The composed warp is a full 3-component deformation field on the
+        # target T1 grid, used only by the resample above (resuming is keyed on
+        # $NODIFF_IN_TARGET_T1, not on the warp). Keeping all N of them until
+        # the end of the run held ~100 MB x N healthy subjects of scratch for no
+        # purpose, which exceeded the job's scratch reservation and filled the
+        # node's disk when several jobs peaked together.
+        rm -f "$COMPOSED"
         
         # Force filesystem sync to prevent stale file handles on network mounts
         sync
@@ -1195,10 +1216,16 @@ process_metrics_step() {
         # structure always did this, for every metric, even ones already
         # fully done, since registration didn't know the final output
         # already existed) would waste real compute and scratch for
-        # nothing.
+        # nothing. A forced run (--force: the user forced this rule, e.g.
+        # after changing the demographics the model is fitted on) recomputes
+        # it instead; the new map replaces the old one atomically at the end,
+        # so an interrupted forced run leaves the previous map intact.
         if [[ -f "$OUTPUT_FILE" ]]; then
-            echo "  [SKIP] Z-score already computed: $OUTPUT_FILE"
-            continue
+            if [[ "$FORCE" -eq 0 ]]; then
+                echo "  [SKIP] Z-score already computed: $OUTPUT_FILE"
+                continue
+            fi
+            echo "  [FORCE] Recomputing existing z-score: $OUTPUT_FILE"
         fi
 
         # --- Register this metric's healthy cohort into target space ---
@@ -1241,6 +1268,10 @@ process_metrics_step() {
                 reg_resample_cmd="\"$NIFTYREG_GPU_BIN/reg_resample\" -ref \"$PREPARED_TARGET_T1\" -flo \"$HEALTHY_METRIC\" -trans \"$COMPOSED\" -res \"$REG_METRIC\" -platf \"$PLATF\" -inter 1 -voff"
                 #echo "    Running reg_resample with command: $reg_resample_cmd"
                 eval "$reg_resample_cmd" > /dev/null 2>&1
+                # Used only by the resample above (resuming is keyed on
+                # $REG_METRIC): delete now rather than holding every healthy
+                # subject's full deformation field until the merge.
+                rm -f "$COMPOSED"
             else
                 # Registration: healthy metric in T1 space -> target T1 space
                 echo "    Registering healthy metric to target T1 space for ${IDX}: HEALTHY T1 -> TARGET T1"

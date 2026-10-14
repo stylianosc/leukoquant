@@ -33,6 +33,7 @@ if not LEUKOQUANT_PARENT_DIR:
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
 
 from leukoquant.utils.z_score_utils import translate_path
+from leukoquant.utils.metrics_utils import apply_metrics_mem_override, compute_metrics_mem_mb, resolve_t1_candidates
 from leukoquant.utils.container_utils import ensure_container, ensure_niftyreg_gpu, ensure_niftyreg_cuda_libs
 
 # Standalone `process-metrics` invokes Snakemake with --configfile=<...>/metrics_config.yaml,
@@ -135,6 +136,21 @@ LESION_NAMES = _get_lesion_names()
 
 T1_MAP  = cfg.get("t1_map",  {})
 DWI_MAP = cfg.get("dwi_map", {})
+
+# One memory request for every metrics job of this run (= this dataset), sized for the dataset's largest T1: the
+# skull strip's memory grows with the T1's physical size and 12 GB was too little for the largest EPAD / ADNI-3 images
+# (see leukoquant/utils/metrics_utils.py). Only NIfTI headers are read.
+# process-all passes container paths in t1_map and the host paths of the same images in t1_host_map; standalone
+# process-metrics has host paths in t1_map already.
+_T1_HOST_MAP = cfg.get("t1_host_map") or T1_MAP
+_metrics_t1_files = [
+    _f for _s in SUBJECTS
+    for _f in resolve_t1_candidates((_T1_HOST_MAP.get(_s, T1_PATH) if _T1_HOST_MAP else T1_PATH), _s)
+]
+METRICS_MEM_MB = compute_metrics_mem_mb(_metrics_t1_files)
+print(f"[metrics memory] {METRICS_MEM_MB // 1024} GB per job, from {len(_metrics_t1_files)} T1 header(s)", flush=True)
+# Optional LEUKOQUANT_METRICS_MEM_GB: use that many GB instead of the computed value (see metrics_utils).
+METRICS_MEM_MB = apply_metrics_mem_override(METRICS_MEM_MB)
 
 def _subst(path_str, subject):
     if path_str and "{subject}" in str(path_str):
@@ -366,15 +382,13 @@ for _parc in PARCELLATIONS:
             error_file=lambda wildcards, p=_parc: f"{_sif_logs_dir(wildcards.subject, p)}/metrics_error.txt",
             platf=PLATF,
         resources:
-            # Set back to 16GB (2026-08-30): the 16GB->18GB bump
-            # (2026-08-16, for mri_synthstrip OOMing 24/816 ADNI3 subjects)
-            # was never confirmed with real numbers, just a guess. Testing
-            # at 16GB again with the new peak-RSS monitor (bash_utils.sh's
-            # start_peak_mem_monitor, wired into metrics_calc.sh's cleanup
-            # trap) to get real per-subject peak usage before picking a
-            # value -- rather than guessing again after the DPUK
-            # NEW002_PETMR_V2 / ADNI3 subj-007-s-6120 NiftyReg crashes.
-            mem_mb=16 * 1024,
+            # Sized per dataset from the largest T1 (METRICS_MEM_MB above,
+            # leukoquant/utils/metrics_utils.py). This replaces the flat
+            # 16 GB: mri_synthstrip's address space grows with the T1's
+            # physical size, 12 GB was too little for the largest EPAD and
+            # ADNI-3 images and a flat 16 GB too little for the biggest ones
+            # (measured peak RSS of the whole step: 6.7-9.7 GB).
+            mem_mb=METRICS_MEM_MB,
             # Bumped from 2GB (2026-08-22): metrics_calc.sh's own
             # materialize_to_scratch() (added the same day as
             # z_score_calc.sh's, to cut SAN load) adds a modest amount of
@@ -402,7 +416,8 @@ for _parc in PARCELLATIONS:
             echo "Date: $(date)"
             echo "Date: $(date)" >&2
 
-            export PYTHONUNBUFFERED=1
+            enable_line_buffering
+
             export FS_LICENSE=/license/license.txt
             [ -f /usr/local/fsl/etc/fslconf/fsl.sh ] && . /usr/local/fsl/etc/fslconf/fsl.sh
 
@@ -421,7 +436,7 @@ for _parc in PARCELLATIONS:
             # substitution intact, including as a real empty '' token when the
             # value is genuinely empty -- see z_score_workflow.smk's CMD block for
             # the confirmed production incident this exact pattern caused there.
-            bash {params.metrics_script_sif} \
+            run_with_peak_mem "metrics" bash {params.metrics_script_sif} \
                 --subject {wildcards.subject} \
                 --tractography-path {params.tractography_path_sif} \
                 --tract-mode '{params.tract_mode}' \
