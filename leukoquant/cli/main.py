@@ -285,6 +285,14 @@ def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], 
 @click.option('--retry-input-failures', is_flag=True, default=False,
               help='Retry subjects that previously failed input checks (e.g. invalid DWI / missing directions). '
                    'Default: skip sessions that already have an input_checks/dwi_failed.txt marker.')
+@click.option('--dry-run', is_flag=True, default=False,
+              help='Plan the run, print the number of jobs per rule and stop; nothing is submitted or deleted.')
+@click.option('--only-forced', is_flag=True, default=False,
+              help='With --force: plan and run only the forced stages. No upstream stage is considered or rerun, whatever the '
+                   'file modification times say; a missing upstream file stops the run with an error.')
+@click.option('--allow-upstream-rerun', is_flag=True, default=False,
+              help='With --force: do not refuse when the plan also reruns a stage upstream of the forced ones '
+                   '(this deletes that stage\'s existing outputs). Default: refuse and list the stages.')
 def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, flair: Optional[str] = None,
                     dwi: Optional[str] = None, output_dir: Optional[str] = None, bvecs: str = "",
                     bvals: str = "", mask: Optional[str] = None, verbose: bool = False,
@@ -293,12 +301,13 @@ def process_all_cmd(subject: Optional[str] = None, t1: Optional[str] = None, fla
                     covariates: Optional[str] = None, poly_terms: Optional[str] = None,
                     parcellation: str = 'freesurfer', config_yaml: Optional[str] = None,
                     force: Optional[str] = None, gpu: bool = False,
-                    retry_input_failures: bool = False) -> dict:
+                    retry_input_failures: bool = False, dry_run: bool = False,
+                    allow_upstream_rerun: bool = False, only_forced: bool = False) -> dict:
     """Run full pipeline: recon-all, bamos, gif, tracula, dti, noddi, metrics."""
     check_sge_plugin(scheduler or "local")
     return _exit_on_failure(process_all(subject, t1, flair, dwi, bvecs, bvals, output_dir, mask, verbose, scheduler, cores, skip_zscore,
                        healthy_subjects, demographics_csv, covariates, poly_terms, parcellation, force, config_yaml, gpu,
-                       retry_input_failures))
+                       retry_input_failures, dry_run, allow_upstream_rerun, only_forced))
 
 @main.command('process-atlas-conversion')
 @click.option('--subject', '-i', required=False,

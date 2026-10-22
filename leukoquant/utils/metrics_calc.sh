@@ -32,6 +32,8 @@ AUTO_FA_SKELETON_PATH=""
 AUTO_FA_SKELETON_SPACE=""
 SCRATCH_DIR=""
 QC_REPORT=""
+PARCELLATION_PATH=""     # label image (GIF or FreeSurfer) from which the ventricle mask is made
+VENTRICLE_LABELS=""      # its ventricle label values, comma-separated
 PLATF=0
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 source "$SCRIPT_DIR/bash_utils.sh"
@@ -102,6 +104,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         --skip-skullstrip-dwi)
             SKIP_SKULLSTRIP_DWI="$2"
+            shift 2
+            ;;
+        --parcellation-path)
+            PARCELLATION_PATH="$2"
+            shift 2
+            ;;
+        --ventricle-labels)
+            VENTRICLE_LABELS="$2"
             shift 2
             ;;
         --qc-report)
@@ -822,13 +832,17 @@ if [ -s "$INPUT_MANIFEST" ]; then
             if [ "$category" != "tractography" ]; then
                 if [ ! -f "$dest" ]; then
                     _src_local=$(materialize_to_scratch "$src" "manifest/$category/$subcat")
+                    # Maps are resampled linearly. The skeleton is a one-voxel-thin binary mask: linear interpolation turns
+                    # it into fractional weights (0..1), which then multiplied the maps (every skeleton statistic, PSMD
+                    # included, was a statistic of map x weight). Nearest neighbour keeps it binary.
+                    if [ "$category" = "skeleton" ]; then _resample_interp=0; else _resample_interp=1; fi
                     "$NIFTYREG_GPU_BIN/reg_resample" \
                         -ref "$T1_FILE" \
                         -flo "$_src_local" \
                         -trans "$DIFF2T1_AFF" \
                         -res "$dest" \
                         -platf "$PLATF" \
-                        -inter 1 \
+                        -inter "$_resample_interp" \
                         -voff
                 fi
             fi
@@ -1034,6 +1048,15 @@ if [ -f "$PY_METRICS_PREP" ]; then
     # Add verbose flag if set
     if [ "$VERBOSE" = "True" ] || [ "$VERBOSE" = "true" ]; then
         PREP_ARGS+=(--verbose)
+    fi
+
+    # Periventricular / deep lesion volumes: the Python script builds the ventricle mask from the label image.
+    if [ -n "$PARCELLATION_PATH" ] && [ -n "$VENTRICLE_LABELS" ]; then
+        if [ -f "$PARCELLATION_PATH" ]; then
+            PREP_ARGS+=(--parcellation-path "$PARCELLATION_PATH" --ventricle-labels "$VENTRICLE_LABELS")
+        else
+            echo "WARNING: parcellation not found at $PARCELLATION_PATH; periventricular / deep lesion volumes are skipped."
+        fi
     fi
 
     # Pass pre-computed tract QC report when available so metrics_calc.py

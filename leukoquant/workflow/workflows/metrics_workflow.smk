@@ -54,6 +54,9 @@ T1_PATH           = cfg.get("t1_path", None)
 DWI_PATH          = cfg.get("dwi_path", None)
 METRICS           = cfg.get("metrics", {})
 OUTPUT_DIR        = cfg.get("output_dir", "./metrics_output")
+# Root of the metrics step's own folders ({root}/{subject}/metrics-{parcellation}/...). Defaults to OUTPUT_DIR; set it to write the
+# metrics somewhere else without touching existing ones. Inputs (the QC report, maps, tracts, ...) are still read from OUTPUT_DIR.
+METRICS_OUTPUT_DIR = cfg.get("metrics_output_dir") or OUTPUT_DIR
 SINGULARITY_BINDS = cfg.get("singularity_binds", {})
 METRIC_MOUNTS     = cfg.get("metric_mounts", {})
 VERBOSE           = cfg.get("verbose", False)
@@ -168,12 +171,12 @@ def _sif_tractography_path(subject, parcellation=None):
 
 def _sif_output_dir(subject, parcellation=None):
     _parc = parcellation or PARCELLATIONS[0]
-    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/outputs"
+    folder = f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/outputs"
     return translate_path(str(Path(folder).resolve()), BIND_MAP)
 
 def _sif_logs_dir(subject, parcellation=None):
     _parc = parcellation or PARCELLATIONS[0]
-    folder = f"{OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/logs"
+    folder = f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{_parc}{_MODE_TAG}/logs"
     return translate_path(str(Path(folder).resolve()), BIND_MAP)
 
 def _sif_qc_report(subject, parcellation=None):
@@ -296,6 +299,9 @@ _dti_ad_map    = cfg.get("dti_ad_map", {})
 _dti_rd_map    = cfg.get("dti_rd_map", {})
 _noddi_odi_map = cfg.get("noddi_odi_map", {})
 _thalamic_map  = cfg.get("thalamic_nuclei_map", {})
+# {parcellation: {subject: label image}} and {parcellation: ventricle labels}: for the periventricular / deep lesion volumes.
+_parcellation_map = cfg.get("parcellation_map", {})
+_ventricle_labels = cfg.get("ventricle_labels", {})
 _tract_qc_map  = cfg.get("tract_qc_report_map", {})  # {subject: {parcellation: path}}
 _z_score_map   = cfg.get("z_score_map", {})          # {subject: [paths]}
 
@@ -305,18 +311,18 @@ wildcard_constraints:
 rule all:
     input:
         # Always-present per-subject outputs
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS] +
         # Per-lesion outputs (empty list when no lesion path is configured)
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS for ln in LESION_NAMES] +
-        [f"{OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv"
+        [f"{METRICS_OUTPUT_DIR}/{subject}/metrics-{parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv"
          for subject in SUBJECTS for parc in PARCELLATIONS for ln in LESION_NAMES]
 
 for _parc in PARCELLATIONS:
@@ -332,6 +338,7 @@ for _parc in PARCELLATIONS:
             dti_rd=lambda wc, m=_dti_rd_map: ([m[wc.subject]] if wc.subject in m else []),
             noddi_odi=lambda wc, m=_noddi_odi_map: ([m[wc.subject]] if wc.subject in m else []),
             thalamic_nuclei=lambda wc, m=_thalamic_map: ([m[wc.subject]] if wc.subject in m else []),
+            parcellation=lambda wc, p=_parc, m=_parcellation_map: ([m[p][wc.subject]] if wc.subject in m.get(p, {}) else []),
             tract_qc_report=lambda wc, p=_parc, m=_tract_qc_map: (
                 [m[wc.subject][p]] if wc.subject in m and p in m[wc.subject] else []
             ),
@@ -348,21 +355,21 @@ for _parc in PARCELLATIONS:
             # interrupted recompute could replace them. update() means a
             # subject that already has valid output is never wiped just
             # because Snakemake schedules the rule to run again.
-            csv=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"),
-            tract_level_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"),
-            skeleton_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"),
+            csv=update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_metrics.csv"),
+            tract_level_metrics=update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/tract_level_metrics.csv"),
+            skeleton_metrics=update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/skeleton_metrics.csv"),
             # Added 2026-09-13 -- metrics_calc.py has written this file unconditionally
             # since af86fcfd, so every subject whose metrics rule has fired since then
             # already has it; declaring it here only newly schedules a rerun for
             # subjects who haven't had metrics_calc run since. See
             # leukoquant-experiments/future_plans/whole_brain_lesion_metrics.md.
-            whole_brain_lesion_metrics=update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"),
+            whole_brain_lesion_metrics=update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/whole_brain_lesion_metrics.csv"),
             lesion_metrics=[
-                update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv")
+                update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_lesion_metrics.csv")
                 for ln in LESION_NAMES
             ],
             lesion_tract_aggregated=[
-                update(f"{OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv")
+                update(f"{METRICS_OUTPUT_DIR}/{{subject}}/metrics-{_parc}{_MODE_TAG}/outputs/metrics/{ln}_tract_aggregated_lesion_metrics.csv")
                 for ln in LESION_NAMES
             ],
         container:
@@ -378,6 +385,10 @@ for _parc in PARCELLATIONS:
             metrics_script_sif=METRICS_SCRIPT_SIF,
             tract_mode=TRACT_MODE,
             qc_report_sif=lambda wildcards, p=_parc: _sif_qc_report(wildcards.subject, p),
+            parcellation_sif=lambda wildcards, p=_parc: (
+                translate_path(str(Path(_parcellation_map[p][wildcards.subject]).resolve()), BIND_MAP)
+                if wildcards.subject in _parcellation_map.get(p, {}) else ""),
+            ventricle_labels=lambda wildcards, p=_parc: _ventricle_labels.get(p, ""),
             log_file=lambda wildcards, p=_parc: f"{_sif_logs_dir(wildcards.subject, p)}/metrics_log.txt",
             error_file=lambda wildcards, p=_parc: f"{_sif_logs_dir(wildcards.subject, p)}/metrics_error.txt",
             platf=PLATF,
@@ -402,7 +413,7 @@ for _parc in PARCELLATIONS:
             disk_mb=3 * 1024,
             time="24:00:00",
             name=f"metrics_{_parc}",
-            workdir=lambda wildcards, p=_parc: f"{OUTPUT_DIR}/{wildcards.subject}/metrics-{p}{_MODE_TAG}",
+            workdir=lambda wildcards, p=_parc: f"{METRICS_OUTPUT_DIR}/{wildcards.subject}/metrics-{p}{_MODE_TAG}",
             sge_resources=("gpu=true" if USE_GPU else ""),
             sge_pe=("gpu" if USE_GPU else None),
         shell:
@@ -446,6 +457,8 @@ for _parc in PARCELLATIONS:
                 --dwi '{params.dwi_path_sif}' \
                 --metrics '{params.metrics_sif_spec}' \
                 --qc-report '{params.qc_report_sif}' \
+                --parcellation-path '{params.parcellation_sif}' \
+                --ventricle-labels '{params.ventricle_labels}' \
                 --platf {params.platf} \
                 $VERBOSE_FLAG \
                 --output-csv {params.output_dir_sif}

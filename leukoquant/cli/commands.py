@@ -130,7 +130,10 @@ def process_all(subject: Optional[str] = None,
                 force: Optional[str] = None,
                 config_yaml: Optional[str] = None,
                 gpu: bool = False,
-                retry_input_failures: bool = False) -> dict:
+                retry_input_failures: bool = False,
+                dry_run: bool = False,
+                allow_upstream_rerun: bool = False,
+                only_forced: bool = False) -> dict:
     """Run full pipeline process-all.
 
     force: comma-separated stages to force-rerun even if their outputs exist
@@ -158,6 +161,9 @@ def process_all(subject: Optional[str] = None,
             config_yaml=config_yaml,
             gpu=gpu,
             retry_input_failures=retry_input_failures,
+            dry_run=dry_run,
+            allow_upstream_rerun=allow_upstream_rerun,
+            only_forced=only_forced,
         )
         return results
     except Exception as e:

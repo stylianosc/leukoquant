@@ -117,6 +117,8 @@ mask_sing_map   = dict(zip(subjects, mask_files_singularity))
 
 # ── Global settings ──────────────────────────────────────────────────────────
 output_dir            = config.get("output_dir")
+# Where the metrics step writes its own folders (metrics-{parcellation}/); defaults to output_dir.
+metrics_output_dir    = config.get("metrics_output_dir") or output_dir
 shared_conda_env_name = config.get("conda_env_name", "process_all_env")
 keep_intermediate     = config.get("keep_intermediate", False)
 leukoquant_parent_dir = config.get("leukoquant_parent_dir")
@@ -235,8 +237,8 @@ for _s in subjects:
     for _parc in PARCELLATIONS:
         os.makedirs(f"{output_dir}/{_s}/tracula-{_parc}/logs",        exist_ok=True)
         os.makedirs(f"{output_dir}/{_s}/tract_qc-{_parc}/logs",       exist_ok=True)
-        os.makedirs(f"{output_dir}/{_s}/metrics-{_parc}/logs",        exist_ok=True)
-        os.makedirs(f"{output_dir}/{_s}/metrics-{_parc}/outputs",     exist_ok=True)
+        os.makedirs(f"{metrics_output_dir}/{_s}/metrics-{_parc}/logs",        exist_ok=True)
+        os.makedirs(f"{metrics_output_dir}/{_s}/metrics-{_parc}/outputs",     exist_ok=True)
 
 # ── Sub-module configs (lists of all subjects) ───────────────────────────────
 
@@ -427,6 +429,8 @@ _metrics_binds: dict = {
     f"{leukoquant_parent_dir}/leukoquant": "/leukoquant",
     f"{leukoquant_parent_dir}": "/leukoquant",
 }
+if metrics_output_dir != output_dir:
+    _metrics_binds[f"{metrics_output_dir}"] = "/metrics_output"
 for _s, _t1_host, _t1_sif in zip(subjects, t1_files, t1_files_singularity):
     if _t1_host and _t1_sif:
         _metrics_binds[str(Path(_t1_host).parent)] = str(Path(_t1_sif).parent)
@@ -545,6 +549,7 @@ config_metrics = {
     },
     "skip_subject_dir_metrics": False,
     "output_dir": output_dir,
+    "metrics_output_dir": metrics_output_dir,
     "verbose": verbose,
     "conda_env_name": shared_conda_env_name,
     "containers": config.get("containers", {}),
@@ -561,6 +566,13 @@ config_metrics = {
     "dti_rd_map":            {s: dti_rd(s) for s in subjects},
     "noddi_odi_map":         {s: noddi_odi(s) for s in subjects},
     "thalamic_nuclei_map":   {s: recon_thalamic(s) for s in subjects},
+    # Label images from which the metrics step builds the ventricle mask (periventricular / deep lesion volumes), per
+    # parcellation, and the label values of the ventricles in each (GIF: lateral + inferior lateral; FreeSurfer: 4, 5, 43, 44).
+    "parcellation_map": {
+        "gif":        {s: gif_parcellation(s) for s in subjects},
+        "freesurfer": {s: recon_aparc_aseg(s) for s in subjects},
+    },
+    "ventricle_labels": {"gif": "50,51,52,53", "freesurfer": "4,5,43,44"},
     "tract_qc_report_map":   {s: {p: f"{output_dir}/{s}/tract_qc-{p}/outputs/qc_report.csv" for p in PARCELLATIONS} for s in subjects},
     "z_score_map":           {s: z_score_outputs(s) for s in subjects},
 }

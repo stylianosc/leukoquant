@@ -44,6 +44,7 @@ for path in _leukoquant_paths:
         sys.path.insert(0, path)
 
 from scipy import ndimage
+from scipy.stats import rankdata
 from skimage.morphology import skeletonize
 
 from leukoquant.utils.tract_qc_util import qc_tract_file as _run_qc_tract_file
@@ -217,7 +218,23 @@ def _load_array(path: str) -> np.ndarray:
     the same order as the original ``values[np.nonzero(values)]``), and a
     C-contiguous array lets ``arr.reshape(-1)`` be a free view.
     """
-    return np.ascontiguousarray(np.asarray(_load(path).dataobj))
+    return _treat_non_finite_as_missing(np.ascontiguousarray(np.asarray(_load(path).dataobj)), path)
+
+
+def _treat_non_finite_as_missing(arr: np.ndarray, label: str = "") -> np.ndarray:
+    """Set NaN and +-Inf voxels to 0, the value that every summary excludes (a voxel with no data).
+
+    A NaN left in a map would turn every statistic of every region it touches into NaN. Treating such voxels as missing
+    keeps all results finite; the number of voxels affected is logged.
+    """
+    if arr.dtype.kind not in "fc":
+        return arr
+    bad = ~np.isfinite(arr)
+    n_bad = int(bad.sum())
+    if n_bad:
+        logger.warning("%d non-finite voxel(s) in %s treated as missing (0).", n_bad, label or "an input array")
+        arr = np.where(bad, 0, arr).astype(arr.dtype, copy=False)
+    return arr
 
 def _voxel_vol_mm3(img: Any) -> float:
     """Return voxel volume in mm³ from a nibabel image."""
@@ -336,109 +353,108 @@ def _shape_stats(values: np.ndarray, mean: float) -> Tuple[float, float]:
     return m3 / m2 ** 1.5, m4 / (m2 * m2) - 3.0
 
 
-def _summary_nonzero(values: np.ndarray) -> Dict[str, float]:
+# Statistics of every region summary, in column order. `n_voxels` (the number of non-zero values) is the first key
+# so that a statistic of an empty region (all 0.0) can be told apart from a real zero, and so that the reliability of a
+# statistic (a standard deviation of one voxel is 0) is visible to a model.
+SUMMARY_STATS = ("p5", "25th", "median", "75th", "p95", "mean", "sum", "std", "IQR", "peak_width", "skew", "kurtosis")
+
+
+def _summary_nonzero(values: np.ndarray, count_key: Optional[str] = "n_voxels") -> Dict[str, float]:
     """Return summary stats over non-zero values (zeros if empty).
 
-    Keys: min, max, mean, sum, median, std, 25th, 75th, IQR, peak_width (95th - 5th percentile),
-    skew and kurtosis (excess kurtosis; see _shape_stats).
+    Keys: n_voxels (number of non-zero values; omitted when `count_key` is None), p5, 25th, median, 75th, p95
+    (percentiles), mean, sum, std, IQR (75th - 25th), peak_width (95th - 5th percentile), skew and kurtosis
+    (excess kurtosis; see _shape_stats). An empty region gives 0.0 everywhere (never NaN).
     """
     non_zero = values[np.nonzero(values)]
+    out: Dict[str, float] = {}
+    if count_key:
+        out[count_key] = float(non_zero.size)
     if non_zero.size == 0:
-        return {
-            "min": 0.0,
-            "max": 0.0,
-            "mean": 0.0,
-            "sum": 0.0,
-            "median": 0.0,
-            "std": 0.0,
-            "25th": 0.0,
-            "75th": 0.0,
-            "IQR": 0.0,
-            "peak_width": 0.0,
-            "skew": 0.0,
-            "kurtosis": 0.0,
-        }
+        out.update({stat: 0.0 for stat in SUMMARY_STATS})
+        return out
 
-    # One np.percentile call (a single partition) instead of four; the values
-    # are bit-identical to four separate calls (same linear interpolation).
-    _p5, _p25, _p75, _p95 = np.percentile(non_zero, [5, 25, 75, 95])
-    p25, p75, p95, p5 = float(_p25), float(_p75), float(_p95), float(_p5)
+    # One np.percentile call (a single partition) instead of five; the values
+    # are bit-identical to separate calls (same linear interpolation).
+    p5, p25, p50, p75, p95 = (float(x) for x in np.percentile(non_zero, [5, 25, 50, 75, 95]))
     # Float64 for the moments, so float32 maps do not lose precision in the 3rd and 4th powers.
     non_zero64 = non_zero.astype(np.float64, copy=False)
     mean = float(np.mean(non_zero64))
     skew, kurtosis = _shape_stats(non_zero64, mean)
-    return {
-        "min": float(np.min(non_zero)),
-        "max": float(np.max(non_zero)),
+    out.update({
+        "p5": p5,
+        "25th": p25,
+        "median": p50,
+        "75th": p75,
+        "p95": p95,
         "mean": float(np.mean(non_zero)),
         "sum": float(np.sum(non_zero)),
-        "median": float(np.median(non_zero)),
         "std": float(np.std(non_zero)),
-        "25th": p25,
-        "75th": p75,
         "IQR": p75 - p25,
         "peak_width": p95 - p5,
         "skew": skew,
         "kurtosis": kurtosis,
-    }
+    })
+    return out
 
-def _summary_change_nonzero(lesion_map: np.ndarray, values_b: np.ndarray) -> Dict[str, float]:
-    """Compute normalised symmetry-ratio statistics comparing inside-lesion vs. outside-lesion values.
+def _weighted_percentiles(values: np.ndarray, weights: np.ndarray, quantiles) -> List[float]:
+    """Weighted percentiles (quantiles in [0, 1]) by linear interpolation of the weighted cumulative distribution.
 
-    Parameters
-    ----------
-    lesion_map : np.ndarray
-        Binary (or soft) lesion mask. Thresholded at 0.5 to produce a hard binary mask.
-    values_b : np.ndarray
-        Continuous value array (e.g. tract PD, FA map) with the same shape as ``lesion_map``.
-
-    Returns
-    -------
-    Dict[str, float]
-        Two keys per summary statistic S (min, max, mean, sum, median, std, 25th, 75th, IQR,
-        peak_width; not skew or kurtosis, see SHAPE_STATS):
-        - ``{S}_change`` : (inside - outside) / (inside + outside). Range [-1, 1].
-            +1 means all values are inside the lesion; -1 means all values are outside.
-            **Edge cases:**
-            - If the lesion has zero overlap with the value array (inside=0, outside>0),
-              returns NaN (metric undefined).
-            - If both inside and outside are zero (denom=0), returns 0.0.
-        - ``{S}_change_absolute`` : abs(inside - outside) / (inside + outside).
-            Always >= 0. Returns NaN when inside=0 and denom!=0. Returns 0.0 when denom=0.
+    Each value sits at the middle of its own weight interval, so with equal weights the result is close to (not identical
+    with) np.percentile; _weighted_summary uses np.percentile itself when the weights are all equal.
     """
-    lesion_map = np.where(lesion_map < 0.5, 0, 1)
-    non_a = lesion_map ^ 1
-    overlap = lesion_map * values_b
-    non_overlap = non_a * values_b
+    order = np.argsort(values, kind="stable")
+    v = values[order]
+    w = weights[order]
+    positions = (np.cumsum(w) - 0.5 * w) / w.sum()
+    return [float(x) for x in np.interp(quantiles, positions, v)]
 
-    overlap_stats = _summary_nonzero(overlap)
-    non_overlap_stats = _summary_nonzero(non_overlap)
 
-    stats: Dict[str, float] = {}
-    for operation in overlap_stats.keys():
-        if operation in SHAPE_STATS:
-            # (a - b) / (a + b) needs two non-negative quantities; skewness and excess kurtosis can be
-            # negative, so the ratio is undefined (and unbounded where a + b crosses zero).
-            continue
-        a_val = overlap_stats[operation]
-        b_val = non_overlap_stats[operation]
-        denom = a_val + b_val
+def _weighted_summary(values: np.ndarray, weights: np.ndarray, count_key: Optional[str] = "n_voxels") -> Dict[str, float]:
+    """The summary statistics of `values` where each voxel counts in proportion to its `weights`.
 
-        if denom == 0:
-            change = 0.0
-            change_abs = 0.0
-        elif a_val == 0:
-            # No values inside the lesion - metric is undefined, not -1
-            change = float('nan')
-            change_abs = float('nan')
-        else:
-            change = (a_val - b_val) / denom
-            change_abs = abs(a_val - b_val) / denom
+    Use this instead of summarising `values * weights`: that product shrinks a value towards 0 wherever its weight is small
+    (for a tract probability map, at the tract's edge), so the statistics describe the weights as much as the map. Here the
+    values are untouched and the weights decide how much each voxel counts: weighted mean sum(w v) / sum(w), weighted
+    standard deviation, weighted percentiles, weighted skewness and excess kurtosis (central moments with the same
+    weighted mean). `sum` stays sum(w v), the weighted total (an expected volume for probability weights).
 
-        stats[f"{operation}_change"] = change
-        stats[f"{operation}_change_absolute"] = change_abs
+    Voxels where the value or the weight is 0 are excluded, exactly as the zeros of a product are excluded by
+    _summary_nonzero. With equal weights the percentiles are np.percentile's and the mean, std, skewness and kurtosis
+    equal the unweighted ones. An empty region gives 0.0 everywhere.
+    """
+    keep = (values != 0) & (weights != 0)
+    v = values[keep].astype(np.float64, copy=False)
+    w = weights[keep].astype(np.float64, copy=False)
+    out: Dict[str, float] = {}
+    if count_key:
+        out[count_key] = float(v.size)
+    if v.size == 0:
+        out.update({stat: 0.0 for stat in SUMMARY_STATS})
+        return out
 
-    return stats
+    total = float(w.sum())
+    mean = float((w * v).sum() / total)
+    d = v - mean
+    d2 = d * d
+    m2 = float((w * d2).sum() / total)
+    if m2 <= (np.finfo(np.float64).resolution * mean) ** 2 or m2 == 0.0:
+        skew, kurtosis = 0.0, 0.0
+    else:
+        m3 = float((w * d2 * d).sum() / total)
+        m4 = float((w * d2 * d2).sum() / total)
+        skew, kurtosis = m3 / m2 ** 1.5, m4 / (m2 * m2) - 3.0
+    if np.all(w == w[0]):
+        p5, p25, p50, p75, p95 = (float(x) for x in np.percentile(v, [5, 25, 50, 75, 95]))
+    else:
+        p5, p25, p50, p75, p95 = _weighted_percentiles(v, w, [0.05, 0.25, 0.5, 0.75, 0.95])
+    out.update({
+        "p5": p5, "25th": p25, "median": p50, "75th": p75, "p95": p95,
+        "mean": mean, "sum": float((w * v).sum()), "std": float(np.sqrt(m2)),
+        "IQR": p75 - p25, "peak_width": p95 - p5, "skew": skew, "kurtosis": kurtosis,
+    })
+    return out
+
 
 # ============================================================================
 # Metric family: whole-brain
@@ -458,10 +474,12 @@ def _compute_whole_brain_metrics(
     tiv_mm3            Total intracranial volume (mm³).
     {lesion_name}_volume_mm3
                        Lesion volume in whole brain (per lesion type).
-    {lesion_name}_volume_tiv_normalised_mm3
-                       Lesion volume normalised by TIV (mm³) in whole brain (per lesion type).
     {lesion_name}_load_pct
-                       Lesion load % in whole brain (per lesion type).
+                       Lesion load % in whole brain (per lesion type): volume / TIV x 100.
+    {lesion_name}_n_lesions
+                       Number of lesions (26-connected components) per lesion type.
+    {lesion_name}_mean_lesion_volume_mm3
+                       Mean volume of a lesion (mm³); 0.0 when there is no lesion.
     """
     row: Dict[str, Any] = {"subject": subject}
 
@@ -481,305 +499,138 @@ def _compute_whole_brain_metrics(
         row[f"{lesion_name}_volume_mm3"] = lesion_vol
         if tiv_mm3 and tiv_mm3 > 0:
             row[f"{lesion_name}_load_pct"] = lesion_vol / tiv_mm3 * 100.0
-            row[f"{lesion_name}_volume_tiv_normalised_mm3"] = lesion_vol / tiv_mm3
         else:
             row[f"{lesion_name}_load_pct"] = None
-            row[f"{lesion_name}_volume_tiv_normalised_mm3"] = None
-
+        _, n_lesions = ndimage.label(lesion_array > 0, structure=STRUCTURE_26)
+        row[f"{lesion_name}_n_lesions"] = int(n_lesions)
+        row[f"{lesion_name}_mean_lesion_volume_mm3"] = lesion_vol / n_lesions if n_lesions else 0.0
 
     return pd.DataFrame([row])
+
+# ============================================================================
+# Metric family: periventricular versus deep white matter lesions
+# ============================================================================
+
+# Lesions within this distance of the ventricles are periventricular, the rest deep. The two have different causes and
+# are graded separately on the Fazekas scale.
+PERIVENTRICULAR_MM = 10.0
+
+
+def _ventricle_mask(parcellation_path: str, labels: str, ref_img: Any) -> np.ndarray:
+    """Binary ventricle mask on the reference (T1) voxel grid, from a label image.
+
+    The label image is resampled to the reference grid with nearest-neighbour interpolation when its shape or affine
+    differ (a FreeSurfer aparc+aseg is conformed, a GIF parcellation is usually already on the T1 grid), then the voxels
+    whose label is in `labels` ("50,51,52,53") are kept. An empty mask is an error: it would silently make every lesion
+    "deep".
+    """
+    import nibabel.processing as nibproc
+    wanted = [int(x) for x in str(labels).split(",") if x.strip()]
+    img = _load(parcellation_path)
+    if tuple(img.shape[:3]) != tuple(ref_img.shape[:3]) or not np.allclose(img.affine, ref_img.affine, atol=1e-3):
+        img = nibproc.resample_from_to(img, (ref_img.shape[:3], ref_img.affine), order=0)
+    mask = np.isin(np.asarray(img.dataobj), wanted)
+    if not mask.any():
+        raise ValueError(f"None of the ventricle labels {wanted} is present in {parcellation_path}")
+    return mask.astype(np.uint8)
+
+
+def _periventricular_deep_metrics(
+    lesion_name: str,
+    lesion_array: np.ndarray,
+    ventricle_array: np.ndarray,
+    voxel_sizes,
+    voxel_vol_mm3: float,
+) -> Dict[str, float]:
+    """Lesion volume within PERIVENTRICULAR_MM of the ventricles, beyond it, and the periventricular share.
+
+    {lesion}_pvwmh_volume_mm3   lesion volume (mm3) within PERIVENTRICULAR_MM of the ventricular system
+    {lesion}_dwmh_volume_mm3    lesion volume (mm3) farther away
+    {lesion}_pvwmh_fraction     pvwmh / (pvwmh + dwmh); 0.0 for a subject without lesion
+
+    `ventricle_array` is a binary mask (non-zero = ventricle) on the lesion's voxel grid.
+    """
+    lesion = np.asarray(lesion_array) > 0
+    ventricles = np.asarray(ventricle_array) > 0
+    if lesion.shape != ventricles.shape:
+        raise ValueError(f"Ventricle mask shape {ventricles.shape} does not match the lesion shape {lesion.shape}")
+    if not lesion.any():
+        pv = dw = 0.0
+    else:
+        near = _distance_to_lesion(ventricles, voxel_sizes) <= PERIVENTRICULAR_MM if ventricles.any() else np.zeros_like(lesion)
+        pv = float(np.count_nonzero(lesion & near)) * voxel_vol_mm3
+        dw = float(np.count_nonzero(lesion & ~near)) * voxel_vol_mm3
+    total = pv + dw
+    return {
+        f"{lesion_name}_pvwmh_volume_mm3": pv,
+        f"{lesion_name}_dwmh_volume_mm3": dw,
+        f"{lesion_name}_pvwmh_fraction": pv / total if total > 0 else 0.0,
+    }
+
 
 # ============================================================================
 # Metric family: whole-brain lesion microstructure
 # ============================================================================
 
-def _compute_whole_brain_lesion_microstructure_metrics(
-    subject: str,
-    map_arrays: Dict[str, np.ndarray],
-    lesion_arrays: Dict[str, np.ndarray],
-    binary_lesion_arrays: Dict[str, np.ndarray],
-    penumbras_arrays: Dict[str, np.ndarray],
-    dilated_lesion_arrays: Dict[str, np.ndarray],
-) -> pd.DataFrame:
-    """Compute whole-brain lesion-restricted microstructure metrics.
-
-    Same idea as the tract-level "lesion microstructure" / "penumbra
-    microstructure" families the tract loop below computes, just without the
-    tract-mask restriction -- every map is summarised over the WHOLE
-    lesion/penumbra/dilated-lesion region rather than its intersection with
-    one of the 42 tracts. This is the metric family a whole-brain-scope score
-    (e.g. Fazekas, a holistic visual rating) is actually comparable to; a
-    tract-restricted metric never is, since Fazekas has no per-tract
-    structure of its own.
-
-    Runs once per subject (no tract loop), reusing the exact lesion/map
-    arrays _load_inputs() already loaded for the tract-level pass below --
-    no new data loading, no new CLI flags.
-
-    Columns
-    -------
-    subject
-    {map}_{lesion}_map_wb_lesion_binary_{stat}
-        Map values inside the binary lesion mask (whole brain).
-    {map}_{lesion}_map_wb_lesion_pd_{stat}
-        Map values weighted by lesion probability density (whole brain).
-    {map}_{lesion}_map_wb_penumbra_{stat}
-        Map values in the penumbra ring around the lesion (whole brain).
-    {map}_{lesion}_map_wb_dilated_lesion_{stat}
-        Map values in the dilated-lesion (lesion + penumbra) region (whole brain).
-    {stat} is one of the _summary_nonzero() keys: min, max, mean, sum,
-    median, std, 25th, 75th, IQR, peak_width, skew, kurtosis.
-    """
-    row: Dict[str, Any] = {"subject": subject}
-
-    for lesion_name, binary_array in binary_lesion_arrays.items():
-        lesion_pd_array = lesion_arrays.get(lesion_name)
-        penumbra_array = penumbras_arrays.get(lesion_name)
-        dilated_array = dilated_lesion_arrays.get(lesion_name)
-
-        for map_name, map_array in map_arrays.items():
-            regions: Dict[str, np.ndarray] = {
-                "map_wb_lesion_binary": map_array * binary_array,
-            }
-            if lesion_pd_array is not None:
-                regions["map_wb_lesion_pd"] = map_array * lesion_pd_array
-            if penumbra_array is not None:
-                regions["map_wb_penumbra"] = map_array * penumbra_array
-            if dilated_array is not None:
-                regions["map_wb_dilated_lesion"] = map_array * dilated_array
-
-            for suffix, region_values in regions.items():
-                stats = _summary_nonzero(region_values)
-                for stat_name, stat_value in stats.items():
-                    row[f"{map_name}_{lesion_name}_{suffix}_{stat_name}"] = stat_value
-
-    return pd.DataFrame([row])
-
 # ============================================================================
 # Metric family: tract-lesion load
 # ============================================================================
 
-def _compute_lesion_tract_intersection_details(
-    lesion_array: np.ndarray,
-    tract_array: np.ndarray,
-    voxel_vol_mm3: float,
-) -> Dict[str, Any]:
-    """Compute detailed lesion-tract intersection metrics using connected components.
+# ============================================================================
+# SPARSE IMPLEMENTATIONS of the per-tract / per-lesion statistics.
+#
+# Every statistic below is _summary_nonzero(product of a few arrays), i.e. it only
+# ever looks at the NON-ZERO entries of an elementwise product. A product can only
+# be non-zero where each factor is non-zero, so it is enough to evaluate the same
+# elementwise expression on the voxels where the sparsest factor is non-zero (a
+# tract's support, a lesion's support ...), taken in ascending C-order flat index.
+# Non-finite voxels are set to 0 when an array is read (_treat_non_finite_as_missing),
+# so no NaN/Inf can reach these functions.
+# ============================================================================
 
-    For each individual lesion component, compute overlap with the tract mask.
-    Aggregate across all intersecting components.
+# Distance-based tissue around lesions. The penumbra is the ring of tissue within PENUMBRA_RINGS_MM[0] of a lesion; the
+# dilated lesion is the lesion plus that ring. Two outer rings show how far the change in a map extends beyond the lesion.
+# The normal-appearing white matter (NAWM) of a tract is the part of the tract outside the dilated lesion: the reference
+# tissue that the lesion is compared with (the tissue just beside a lesion is already partly damaged, so "everything outside
+# the lesion" is not a clean reference).
+# Lesion components are 26-connected (faces, edges and corners), here and in the per-lesion table.
+STRUCTURE_26 = np.ones((3, 3, 3), dtype=bool)
 
-    Parameters
-    ----------
-    lesion_array : np.ndarray
-        Lesion probability/intensity map.
-    tract_array : np.ndarray
-        Tract binary or probability map.
-    voxel_vol_mm3 : float
-        Single voxel volume in mm³.
+PENUMBRA_RINGS_MM = ((0.0, 3.0), (3.0, 6.0), (6.0, 9.0))
+RING_SUFFIXES = ("penumbra", "penumbra_3_6", "penumbra_6_9")
+DILATION_MM = PENUMBRA_RINGS_MM[0][1]
+# Distance to the nearest lesion is capped (and is this value when a subject has no lesion at all).
+DISTANCE_CAP_MM = 100.0
 
-    Returns
-    -------
-    Dict[str, Any]
-        Dictionary with keys:
-        - overall_percentage_overlap: 
-        Percentage of volume of lesions intersecting tract to total volume of same
-        lesions intersecting tract.
-        - intersecting_lesions_total_volume: 
-        sum of volumes of components intersecting tract
-        - {mean/std/min/max/median/25th/75th/IQR}_percentage_tract_lesion_overlap: 
-        overlap % stats across components
-        - number_lesions_tract_overlap: count of components with any overlap
-        - {mean/std/min/max/median/25th/75th/IQR}_lesions_overlap_volume: 
-        stats on the overlap volume (mm³) of lesion within a tract.
+
+def _distance_to_lesion(lesion_mask: np.ndarray, voxel_sizes) -> np.ndarray:
+    """Euclidean distance (mm, float32) from every voxel to the nearest lesion voxel, capped at DISTANCE_CAP_MM.
+
+    scipy's distance transform of an array without any lesion voxel returns distances to the array border, which are
+    meaningless here; a subject without a lesion therefore gets DISTANCE_CAP_MM everywhere.
     """
-    # Create/reuse binary lesion and tract masks.
-    lesion_binary = np.where(
-            lesion_array < 0.5, 0, 1) if lesion_array.dtype in [
-                np.float32, np.float64] else lesion_array > 0
-    tract_binary = tract_array > 0
+    mask = np.asarray(lesion_mask) != 0
+    if not mask.any():
+        return np.full(mask.shape, DISTANCE_CAP_MM, dtype=np.float32)
+    dist = ndimage.distance_transform_edt(~mask, sampling=voxel_sizes)
+    return np.minimum(dist, DISTANCE_CAP_MM).astype(np.float32)
 
-    # Identify/reuse connected components in lesion mask.
-    labeled_lesions, num_components = ndimage.label(lesion_binary)  # type: ignore
 
-    if num_components > 0:
-        component_voxels = ndimage.sum(
-            input=lesion_binary,
-            labels=labeled_lesions,
-            index=np.arange(1, num_components + 1),
-        )
-        component_volumes_mm3 = np.asarray(
-            component_voxels, dtype=float) * voxel_vol_mm3
-    else:
-        component_volumes_mm3 = np.array([], dtype=float)
+def _summary_reduced(values: np.ndarray) -> Dict[str, float]:
+    """The short summary used for the outer rings: n_voxels, p5, median, p95, mean, std (zeros if empty)."""
+    full = _summary_nonzero(values)
+    return {k: full[k] for k in ("n_voxels", "p5", "median", "p95", "mean", "std")}
 
-    result: Dict[str, Any] = {
-        "in_tract_mm3": 0.0,
-        "load_in_tract_pct": 0.0,
-        "overall_percentage_overlap": 0.0,
-        "intersecting_lesions_total_volume": 0.0,
-        "number_lesions_tract_overlap": 0,
-    }
-
-    tract_volume_mm3 = float(np.sum(tract_binary)) * voxel_vol_mm3
-    tract_lesion_load_mm3 = _compute_load(lesion_array, tract_array, voxel_vol_mm3)
-    result["in_tract_mm3"] = tract_lesion_load_mm3
-    if tract_volume_mm3 > 0:
-        result["load_in_tract_pct"] = tract_lesion_load_mm3 / tract_volume_mm3 * 100.0
-
-    lesion_sizes: List[float] = []
-    overlap_percentages: List[float] = []
-    overlap_volumes: List[float] = []  # Volume of overlap per lesion
-    intersecting_total_volume = 0.0
-    intersecting_components = 0
-
-    # Process each connected component.
-    for component_id in range(1, num_components + 1):
-        component_mask = labeled_lesions == component_id
-        component_volume = float(component_volumes_mm3[component_id - 1])
-
-        # Compute overlap with tract.
-        overlap_mask = np.logical_and(component_mask, tract_binary)
-        overlap_volume_count = int(np.sum(overlap_mask)) * voxel_vol_mm3
-
-        if overlap_volume_count > 0:
-            lesion_sizes.append(component_volume)
-
-            overlap_percentages.append(
-                float(overlap_volume_count) / component_volume * 100.0)
-            overlap_volumes.append(overlap_volume_count)
-            intersecting_total_volume += component_volume
-            intersecting_components += 1
-
-    # Convert to arrays and compute statistics.
-    lesion_sizes_array = np.array(lesion_sizes)
-    overlap_percentages_array = np.array(overlap_percentages)
-    overlap_volumes_array = np.array(overlap_volumes)
-
-    # Total overlap volume tract-lesion (mm³).
-    total_overlap_voxels = int(np.sum(np.logical_and(lesion_binary, tract_binary)))
-    total_overlap_volume = total_overlap_voxels * voxel_vol_mm3
-    if total_overlap_volume != overlap_volumes_array.sum():
-        logger.warning(
-            "Total overlap volume (%.2f mm³) does not match sum of component overlaps (%.2f mm³).",
-            total_overlap_volume, overlap_volumes_array.sum()
-        )
-
-    # Update result with computed values.
-    result["overall_percentage_overlap"] = (
-        float(total_overlap_volume) / intersecting_total_volume * 100.0
-        if intersecting_total_volume > 0 else 0.0
-    )
-    result["intersecting_lesions_total_volume"] = intersecting_total_volume
-    result["number_lesions_tract_overlap"] = intersecting_components
-
-    distribution_inputs = (
-        (lesion_sizes_array, "lesion_sizes_mm3"),
-        (overlap_percentages_array, "percentage_tract_lesion_overlap"),
-        (overlap_volumes_array, "lesions_overlap_volumes_mm3"),
-    )
-    for values, suffix in distribution_inputs:
-        stats = _summary_nonzero(values)
-        for stat_name, stat_value in stats.items():
-            result[f"{stat_name}_{suffix}"] = stat_value
-
-    return result
-
-def _compute_tract_distance_metrics(
-    tract_array: np.ndarray,
-    lesion_array: np.ndarray,
-    voxel_sizes: Tuple[float, float, float],
-) -> Dict[str, float]:
-    """Compute tract-to-lesion distance metrics for one tract array and one lesion array."""
-    if tract_array.shape != lesion_array.shape:
-        logger.warning(
-            "Shapes mismatch: lesion %s vs tract %s; skipping tract distance.",
-            lesion_array.shape,
-            tract_array.shape,
-        )
-        return {
-            "tract_nearest_lesion_distance": float("nan"),
-            "tract_centre_of_mass_nearest_lesion_distance": float("nan"),
-        }
-
-    tract_binary = tract_array > 0
-
-    tract_center_of_mass: Optional[Tuple[int, int, int]] = None
-    if np.any(tract_binary):
-        if tract_binary.ndim != 3:
-            logger.warning("tract_array is not 3D (shape=%s); skipping centre-of-mass.", tract_binary.shape)
-        else:
-            com = ndimage.center_of_mass(tract_binary)
-            tract_center_of_mass = (int(com[0]), int(com[1]), int(com[2]))
-
-    lesion_binary = np.where(lesion_array < 0.5, 0, 1)
-
-    overlap_voxels = int(np.sum(np.logical_and(tract_binary, lesion_binary > 0)))
-    min_distance = 0.0 if overlap_voxels > 0 else np.inf
-    min_distance_com = np.inf
-
-    lesion_inverse = np.where(lesion_binary > 0, 0, 1)
-    distance_map = cast(
-        np.ndarray,
-        ndimage.distance_transform_edt(lesion_inverse, sampling=voxel_sizes),
-    )
-
-    if np.any(tract_binary):
-        masked_distance = np.where(tract_binary, distance_map, np.inf)
-        min_distance = min(min_distance, float(np.min(masked_distance)))
-
-    if tract_center_of_mass is not None:
-        min_distance_com = min(min_distance_com, float(distance_map[tract_center_of_mass]))
-
-    return {
-        "tract_nearest_lesion_distance": min_distance if np.isfinite(min_distance) else np.nan,
-        "tract_centre_of_mass_nearest_lesion_distance": (
-            min_distance_com if np.isfinite(min_distance_com) else np.nan
-        ),
-    }
-
-# ============================================================================
-# FAST PATH: sparse, support-based implementations of the per-tract /
-# per-lesion statistics.
-#
-# Why this is exactly equivalent to the dense code it replaces
-# ------------------------------------------------------------
-# Every statistic below is _summary_nonzero(product of a few dense arrays),
-# i.e. it only ever looks at the NON-ZERO entries of an elementwise product,
-# in C order. A product can only be non-zero where each factor is non-zero, so
-# it is enough to evaluate the *same elementwise expression* on the voxels
-# where the sparsest factor is non-zero (a tract's support, a lesion's support
-# ...), taken in ascending C-order flat index. Because
-#   * the same expression, on the same dtypes (we gather from the original
-#     arrays, we never convert them), is applied to every voxel evaluated,
-#   * zero products are dropped by _summary_nonzero exactly as before, and
-#   * the surviving values reach np.sum/np.mean/np.percentile in the same
-#     order and with the same dtype,
-# the results are bit-identical to the dense implementation.
-#
-# The one situation where the argument breaks is a NaN / Inf anywhere in a map
-# (NaN * 0 = NaN is "non-zero" in the dense code but outside every support in
-# the sparse one). _inputs_are_finite() guards the fast path; if it ever
-# returns False the legacy dense implementation is used instead.
-# ============================================================================
 
 def _flat(arr: np.ndarray) -> np.ndarray:
     """C-order 1-D view of an array (a copy only if it is not C-contiguous)."""
     return arr.reshape(-1)
 
 
-def _inputs_are_finite(arrays) -> bool:
-    """True if no floating-point array contains NaN/Inf (see the note above)."""
-    for arr in arrays:
-        if arr is not None and arr.dtype.kind in "fc" and not np.isfinite(arr).all():
-            return False
-    return True
-
-
 class _LesionContext:
     """Per-lesion-set data computed once and reused for every tract and map."""
 
-    def __init__(self, lesion_array, binary, dilated, penumbra):
+    def __init__(self, lesion_array, binary, dilated, penumbra, distance=None):
         self.lesion = _flat(lesion_array)
         self.binary = _flat(binary)
         self.dilated = _flat(dilated)
@@ -793,8 +644,8 @@ class _LesionContext:
         # lesion_map of _summary_change_nonzero / distance code: np.where(x < 0.5, 0, 1)
         self.lm = ~(self.lesion < 0.5)
         self.has_negative = bool((self.lesion < 0).any())
-        # 6-connected components of the binary lesion (the tract loop's labelling)
-        labels, self.n_comp = ndimage.label(binary)
+        # 26-connected components of the binary lesion
+        labels, self.n_comp = ndimage.label(binary, structure=STRUCTURE_26)
         self.labels = _flat(labels)
         self.labels_at_bin = self.labels[self.idx_bin]
         # components used by _compute_lesion_tract_intersection_details: label
@@ -807,19 +658,15 @@ class _LesionContext:
         if np.array_equal(det_binary, self.binary != 0):
             self.det_labels, self.det_n = self.labels, self.n_comp
         else:
-            dl, self.det_n = ndimage.label(det_binary.reshape(self.shape))
+            dl, self.det_n = ndimage.label(det_binary.reshape(self.shape), structure=STRUCTURE_26)
             self.det_labels = _flat(dl)
         self.det_comp_voxels = np.bincount(self.det_labels, minlength=self.det_n + 1)[1:]
-        self._dist = None
+        self._dist = None if distance is None else _flat(np.asarray(distance, dtype=np.float32))
 
     def distance_flat(self, voxel_sizes):
-        """Euclidean distance (mm) to the nearest lesion voxel, once per lesion set."""
+        """Distance (mm, capped; see _distance_to_lesion) to the nearest lesion voxel, once per lesion set."""
         if self._dist is None:
-            lesion_inverse = np.where(self.lm, 0, 1).reshape(self.shape)
-            self._dist = _flat(cast(
-                np.ndarray,
-                ndimage.distance_transform_edt(lesion_inverse, sampling=voxel_sizes),
-            ))
+            self._dist = _flat(_distance_to_lesion(self.lm.reshape(self.shape), voxel_sizes))
         return self._dist
 
 
@@ -834,63 +681,46 @@ class _TractContext:
         self.vals = flat[self.idx_nz]                  # tract values there
         self.binary = _flat(tract_binary)
         self.idx_bin = np.flatnonzero(self.binary)     # tract > 0
-        self.idx_skel = np.flatnonzero(_flat(tract_skeleton))
+        self.idx_skel = np.flatnonzero(_flat(tract_skeleton) > 0.5)
         self.has_negative = bool((self.vals < 0).any())
         # lesion-independent products with each map, filled lazily
         self.map_pd = {}
 
-    def centre_of_mass_voxel(self):
-        """int() of scipy's center_of_mass(tract_binary), computed exactly.
 
-        scipy sums integer-valued coordinates in float64 (exact below 2**53)
-        and divides by the voxel count, so an integer sum followed by one
-        division gives the identical float, and hence the identical int().
-        """
-        n = len(self.idx_bin)
-        coords = np.unravel_index(self.idx_bin, self.shape)
-        return tuple(int(int(c.sum(dtype=np.int64)) / n) for c in coords)
+# Statistics compared between the lesion and the reference tissue (no n_voxels, no shape statistics: the difference of two
+# skewness values is not a meaningful quantity).
+CHANGE_STATS = ("p5", "25th", "median", "75th", "p95", "mean", "sum", "std", "IQR", "peak_width")
 
 
-def _change_from_stats(overlap_stats, non_overlap_stats):
-    """Second half of _summary_change_nonzero (unchanged logic)."""
-    stats: Dict[str, float] = {}
-    for operation in overlap_stats.keys():
-        if operation in SHAPE_STATS:
-            # (a - b) / (a + b) needs two non-negative quantities; skewness and excess kurtosis can be
-            # negative, so the ratio is undefined (and unbounded where a + b crosses zero).
-            continue
-        a_val = overlap_stats[operation]
-        b_val = non_overlap_stats[operation]
-        denom = a_val + b_val
+def _auc(inside: np.ndarray, outside: np.ndarray) -> float:
+    """Probability that a random `inside` value exceeds a random `outside` value (ties count one half).
 
-        if denom == 0:
-            change = 0.0
-            change_abs = 0.0
-        elif a_val == 0:
-            change = float('nan')
-            change_abs = float('nan')
-        else:
-            change = (a_val - b_val) / denom
-            change_abs = abs(a_val - b_val) / denom
-
-        stats[f"{operation}_change"] = change
-        stats[f"{operation}_change_absolute"] = change_abs
-    return stats
-
-
-def _fast_summary_change(lc: _LesionContext, tc: _TractContext, values_at_support: np.ndarray):
-    """_summary_change_nonzero(lesion_map=lesion, values_b=v) for a v whose
-    non-zero voxels all lie in the tract's non-zero support.
-
-    values_at_support: v evaluated at tc.idx_nz.
+    This is the Mann-Whitney U statistic divided by the number of pairs. It lies in [0, 1] whatever the values are (0.5 = no
+    difference, 1 = every inside value is larger), needs no distribution, and a single extreme value hardly moves it. If
+    either group is empty there is nothing to compare and the result is the neutral 0.5.
     """
-    inside = lc.lm[tc.idx_nz]
-    n_in = int(inside.sum())
-    ones_in = np.ones(n_in, dtype=np.int64)                    # lesion_map      (int64)
-    ones_out = np.ones(len(inside) - n_in, dtype=np.int64)     # lesion_map ^ 1  (int64)
-    overlap_stats = _summary_nonzero(ones_in * values_at_support[inside])
-    non_overlap_stats = _summary_nonzero(ones_out * values_at_support[~inside])
-    return _change_from_stats(overlap_stats, non_overlap_stats)
+    n1, n2 = len(inside), len(outside)
+    if n1 == 0 or n2 == 0:
+        return 0.5
+    ranks = rankdata(np.concatenate([inside, outside]))          # average ranks: ties count one half
+    return float((ranks[:n1].sum() - n1 * (n1 + 1) / 2.0) / (n1 * n2))
+
+
+def _lesion_vs_reference(inside: np.ndarray, reference: np.ndarray) -> Dict[str, float]:
+    """How the values inside the lesion differ from those of the reference tissue (the tract's NAWM).
+
+    For each statistic S in CHANGE_STATS: `{S}_diff` = S(inside) - S(reference), in the units of the map (for a Z-score map,
+    standard deviations). Plus `auc` (see _auc). Zero values are excluded, as in every region summary. Where a group is
+    empty the differences are 0.0 and the AUC 0.5: no values, no detectable change, never NaN.
+    """
+    inside = inside[inside != 0].astype(np.float64, copy=False)
+    reference = reference[reference != 0].astype(np.float64, copy=False)
+    a = _summary_nonzero(inside, count_key=None)
+    b = _summary_nonzero(reference, count_key=None)
+    both = len(inside) > 0 and len(reference) > 0
+    out = {f"{stat}_diff": (a[stat] - b[stat]) if both else 0.0 for stat in CHANGE_STATS}
+    out["auc"] = _auc(inside, reference)
+    return out
 
 
 def _fast_lesion_tract_intersection_details(lc: _LesionContext, tc: _TractContext, voxel_vol_mm3: float):
@@ -963,36 +793,38 @@ def _fast_lesion_tract_intersection_details(lc: _LesionContext, tc: _TractContex
         (overlap_volumes_array, "lesions_overlap_volumes_mm3"),
     )
     for values, suffix in distribution_inputs:
-        stats = _summary_nonzero(values)
+        stats = _summary_nonzero(values, count_key=None)
         for stat_name, stat_value in stats.items():
             result[f"{stat_name}_{suffix}"] = stat_value
 
     return result
 
 
+FRACTION_WITHIN_MM = 5.0
+
+
 def _fast_tract_distance_metrics(lc: _LesionContext, tc: _TractContext, voxel_sizes):
-    """Fast equivalent of _compute_tract_distance_metrics.
+    """How close the tract is to the lesions (mm; capped at DISTANCE_CAP_MM, which is also the value without any lesion).
 
-    The Euclidean distance transform depends only on the lesion mask, so it is
-    computed once per lesion set (lc.distance_flat) instead of once per tract.
+    tract_nearest_lesion_distance            smallest distance of any tract voxel to a lesion (0 if the tract contains lesion)
+    tract_mean_lesion_distance               mean over the tract's voxels of the distance to the nearest lesion
+    tract_fraction_within_5mm_of_lesion      share of the tract's voxels that lie within 5 mm of a lesion (lesion included)
+
+    The distance transform depends only on the lesion mask, so it is computed once per lesion set (lc.distance_flat).
+    These replace the distance of the tract's centre of mass, which for a curved tract can lie outside the tract.
+    A tract without voxels has no distance: the cap, and a fraction of 0.
     """
-    distance = lc.distance_flat(voxel_sizes)
-    has_tract = len(tc.idx_bin) > 0
-
-    overlap_voxels = int(np.count_nonzero(lc.lm[tc.idx_bin]))
-    min_distance = 0.0 if overlap_voxels > 0 else np.inf
-    min_distance_com = np.inf
-
-    if has_tract:
-        min_distance = min(min_distance, float(np.min(distance[tc.idx_bin])))
-        com = tc.centre_of_mass_voxel()
-        min_distance_com = min(min_distance_com, float(distance[np.ravel_multi_index(com, tc.shape)]))
-
+    if len(tc.idx_bin) == 0:
+        return {
+            "tract_nearest_lesion_distance": DISTANCE_CAP_MM,
+            "tract_mean_lesion_distance": DISTANCE_CAP_MM,
+            f"tract_fraction_within_{int(FRACTION_WITHIN_MM)}mm_of_lesion": 0.0,
+        }
+    d = lc.distance_flat(voxel_sizes)[tc.idx_bin].astype(np.float64)
     return {
-        "tract_nearest_lesion_distance": min_distance if np.isfinite(min_distance) else np.nan,
-        "tract_centre_of_mass_nearest_lesion_distance": (
-            min_distance_com if np.isfinite(min_distance_com) else np.nan
-        ),
+        "tract_nearest_lesion_distance": float(d.min()),
+        "tract_mean_lesion_distance": float(d.mean()),
+        f"tract_fraction_within_{int(FRACTION_WITHIN_MM)}mm_of_lesion": float(np.mean(d <= FRACTION_WITHIN_MM)),
     }
 
 
@@ -1041,10 +873,6 @@ def _compute_tract_level_metrics_fast(
         if tc.has_negative:
             logger.warning(f"Warning: Tract '{tract_name}' contains negative values; check input data.")
 
-        # map x tract PD over the tract's support (also reused by the whole-tract stats)
-        map_tract_pd_at_support = {
-            map_name: mflat[tc.idx_nz] * tc.vals for map_name, mflat in map_flat.items()
-        }
 
         for lesion_name, lc in lesion_contexts.items():
             if lc.has_negative:
@@ -1074,14 +902,37 @@ def _compute_tract_level_metrics_fast(
             stats_tract_pd_lesion_binary = _summary_nonzero(tpl_bin)
             stats_tract_pd_lesion_dilated = _summary_nonzero(tpl_dil)
             stats_tract_pd_lesion_penumbra = _summary_nonzero(tpl_pen)
-            change_tract_pd_lesion = _fast_summary_change(lc, tc, tc.vals)
+
+            # Tissue by distance to the nearest lesion: the NAWM (the tract outside the dilated lesion) and the two outer rings.
+            dist_all = lc.distance_flat(voxel_sizes)
+            d_nz, d_bin = dist_all[tc.idx_nz], dist_all[tc.idx_bin]
+            nawm_nz = d_nz > DILATION_MM                                # over the tract's probability support
+            nawm_bin = tc.idx_bin[d_bin > DILATION_MM]                  # over the binary tract
+            outer_rings = {
+                suffix: tc.idx_bin[(d_bin > lo) & (d_bin <= hi)]
+                for suffix, (lo, hi) in zip(RING_SUFFIXES[1:], PENUMBRA_RINGS_MM[1:])
+            }
+            # Share of the tract's streamline density that lies inside lesions: a voxel-based proxy for how much of the tract
+            # a lesion cuts (the tract probability map is the normalised streamline density). Not the share of streamlines
+            # touching a lesion, which needs the streamlines themselves.
+            density_total = float(tc.vals.sum())
+            tract_row[f"{lesion_name}_tract_density_fraction_in_lesion"] = (
+                float(tc.vals[lc.lm[tc.idx_nz]].sum()) / density_total if density_total > 0 else 0.0)
+            tract_row[f"{lesion_name}_tract_nawm_n_voxels"] = float(len(nawm_bin))
+            for suffix, idx in outer_rings.items():
+                tract_row[f"{lesion_name}_tract_{suffix}_n_voxels"] = float(len(idx))
+
+            # Lesion versus the tract's NAWM, for the tract probability itself and (below) for every map.
+            inside_nz = lc.lm[tc.idx_nz]
+            change_tract_pd_lesion = _lesion_vs_reference(tc.vals[inside_nz], tc.vals[nawm_nz])
+            inside_bin = tc.idx_bin[lc.lm[tc.idx_bin]]
 
             tract_lesion_metrics = {
                 "tract_pd_lesion_pd": stats_tract_pd_lesion_pd,
                 "tract_pd_lesion_binary": stats_tract_pd_lesion_binary,
                 "tract_pd_lesion_dilated": stats_tract_pd_lesion_dilated,
                 "tract_pd_lesion_penumbra": stats_tract_pd_lesion_penumbra,
-                "tract_pd_change_lesion_binary": change_tract_pd_lesion,
+                "tract_lesion_vs_nawm": change_tract_pd_lesion,
             }
 
             for detail_key, detail_val in tract_lesion_load_details.items():
@@ -1094,14 +945,14 @@ def _compute_tract_level_metrics_fast(
 
             ones_whole = np.ones(n_whole, dtype=np.uint8)
             for map_name, mflat in map_flat.items():
-                stats_map_tract_pd_lesion_pd = _summary_nonzero(mflat[lc.idx_pd] * tpl_pd)
+                stats_map_tract_pd_lesion_pd = _weighted_summary(mflat[lc.idx_pd], tpl_pd)
                 stats_map_tract_binary_lesion_binary = _summary_nonzero(mflat[lc.idx_bin] * tbl_bin)
-                stats_map_tract_pd_dilated_lesion = _summary_nonzero(mflat[lc.idx_dil] * tpl_dil)
+                stats_map_tract_pd_dilated_lesion = _weighted_summary(mflat[lc.idx_dil], tpl_dil)
                 stats_map_tract_binary_dilated_lesion = _summary_nonzero(mflat[lc.idx_dil] * tbl_dil)
-                stats_map_tract_pd_penumbra = _summary_nonzero(mflat[lc.idx_pen] * tpl_pen)
+                stats_map_tract_pd_penumbra = _weighted_summary(mflat[lc.idx_pen], tpl_pen)
                 stats_map_tract_binary_penumbra = _summary_nonzero(mflat[lc.idx_pen] * tbl_pen)
                 stats_map_tract_binary_whole_overlapping_lesions = _summary_nonzero(mflat[idx_whole] * ones_whole)
-                change_map_tract_pd_lesion = _fast_summary_change(lc, tc, map_tract_pd_at_support[map_name])
+                change_map_lesion = _lesion_vs_reference(mflat[inside_bin], mflat[nawm_bin])
 
                 tract_lesion_metrics_map = {
                     "map_tract_pd_lesion_pd": stats_map_tract_pd_lesion_pd,
@@ -1110,8 +961,11 @@ def _compute_tract_level_metrics_fast(
                     "map_tract_binary_dilated_lesion": stats_map_tract_binary_dilated_lesion,
                     "map_tract_pd_penumbra": stats_map_tract_pd_penumbra,
                     "map_tract_binary_penumbra": stats_map_tract_binary_penumbra,
-                    "map_tract_pd_change_lesion_binary": change_map_tract_pd_lesion,
+                    "map_tract_lesion_vs_nawm": change_map_lesion,
                     "map_tract_binary_whole_overlapping_lesions": stats_map_tract_binary_whole_overlapping_lesions,
+                    "map_tract_pd_nawm": _weighted_summary(mflat[tc.idx_nz][nawm_nz], tc.vals[nawm_nz]),
+                    "map_tract_binary_nawm": _summary_nonzero(mflat[nawm_bin]),
+                    **{f"map_tract_binary_{suffix}": _summary_reduced(mflat[idx]) for suffix, idx in outer_rings.items()},
                 }
                 for suffix, metrics in tract_lesion_metrics_map.items():
                     for metric_name, metric_value in metrics.items():
@@ -1122,11 +976,9 @@ def _compute_tract_level_metrics_fast(
                 logger.warning(f"Warning: Map '{map_name}' contains negative values; check input data.")
 
             # Whole-tract map stats (tract PD / tract binary / tract skeleton)
-            stats_map_tract_pd = _summary_nonzero(map_tract_pd_at_support[map_name])
+            stats_map_tract_pd = _weighted_summary(mflat[tc.idx_nz], tc.vals)
             stats_map_tract_binary = _summary_nonzero(mflat[tc.idx_bin] * tbin_flat[tc.idx_bin])
-            stats_map_tract_skeletonised = _summary_nonzero(
-                _flat(tract_skeletons_arrays[tract_name])[tc.idx_skel] * mflat[tc.idx_skel]
-            )
+            stats_map_tract_skeletonised = _summary_nonzero(mflat[tc.idx_skel])     # the skeleton is binary
             tract_array_metrics_map = {
                 "map_tract_pd": stats_map_tract_pd,
                 "map_tract_binary": stats_map_tract_binary,
@@ -1150,28 +1002,28 @@ def _compute_whole_brain_lesion_microstructure_metrics_fast(
     dilated_lesion_arrays: Dict[str, np.ndarray],
     lesion_contexts: Optional[Dict[str, _LesionContext]] = None,
 ) -> pd.DataFrame:
-    """Support-based equivalent of _compute_whole_brain_lesion_microstructure_metrics."""
+    """Whole-brain lesion-restricted microstructure (support-based): each map summarised over the lesion regions."""
     row: Dict[str, Any] = {"subject": subject}
     map_flat = {name: _flat(arr) for name, arr in map_arrays.items()}
 
     for lesion_name, binary_array in binary_lesion_arrays.items():
+        # Optional regions that were not supplied are empty (and are not written).
+        empty = np.zeros_like(binary_array)
         lc = (lesion_contexts or {}).get(lesion_name) or _LesionContext(
-            lesion_arrays[lesion_name], binary_array,
-            dilated_lesion_arrays[lesion_name], penumbras_arrays[lesion_name])
+            lesion_arrays.get(lesion_name, empty), binary_array,
+            dilated_lesion_arrays.get(lesion_name, empty), penumbras_arrays.get(lesion_name, empty))
 
         for map_name, mflat in map_flat.items():
-            regions: Dict[str, np.ndarray] = {
-                "map_wb_lesion_binary": mflat[lc.idx_bin] * lc.binary[lc.idx_bin],
-            }
+            # (suffix, summary): the lesion probability weights the lesion_pd region; the others are binary regions.
+            summaries = [("map_wb_lesion_binary", _summary_nonzero(mflat[lc.idx_bin] * lc.binary[lc.idx_bin]))]
             if lesion_name in lesion_arrays:
-                regions["map_wb_lesion_pd"] = mflat[lc.idx_pd] * lc.lesion[lc.idx_pd]
+                summaries.append(("map_wb_lesion_pd", _weighted_summary(mflat[lc.idx_pd], lc.lesion[lc.idx_pd])))
             if lesion_name in penumbras_arrays:
-                regions["map_wb_penumbra"] = mflat[lc.idx_pen] * lc.penumbra[lc.idx_pen]
+                summaries.append(("map_wb_penumbra", _summary_nonzero(mflat[lc.idx_pen] * lc.penumbra[lc.idx_pen])))
             if lesion_name in dilated_lesion_arrays:
-                regions["map_wb_dilated_lesion"] = mflat[lc.idx_dil] * lc.dilated[lc.idx_dil]
+                summaries.append(("map_wb_dilated_lesion", _summary_nonzero(mflat[lc.idx_dil] * lc.dilated[lc.idx_dil])))
 
-            for suffix, region_values in regions.items():
-                stats = _summary_nonzero(region_values)
+            for suffix, stats in summaries:
                 for stat_name, stat_value in stats.items():
                     row[f"{map_name}_{lesion_name}_{suffix}_{stat_name}"] = stat_value
 
@@ -1180,12 +1032,12 @@ def _compute_whole_brain_lesion_microstructure_metrics_fast(
 
 def _skeleton_metrics_fast(subject: str, map_arrays: Dict[str, np.ndarray], skeleton_array: np.ndarray) -> pd.DataFrame:
     """map x skeleton statistics over the skeleton's support only."""
-    sk = _flat(skeleton_array)
-    idx = np.flatnonzero(sk)
-    sk_at = sk[idx]
+    # The skeleton is a binary mask: a voxel is on it or not. Weighting the map by the mask's values (255 for some scikit-image
+    # versions, fractions after a linear resampling) would make every statistic, PSMD included, one of map x weight.
+    idx = np.flatnonzero(_flat(skeleton_array) > 0.5)
     rows: List[Dict[str, Any]] = []
     for map_name, map_array in map_arrays.items():
-        stats_skeleton_map = _summary_nonzero(_flat(map_array)[idx] * sk_at)
+        stats_skeleton_map = _summary_nonzero(_flat(map_array)[idx])
         row = {"subject": subject, "map_name": map_name}
         for stat_name, stat_value in stats_skeleton_map.items():
             row[f"skeleton_{stat_name}"] = stat_value
@@ -1194,13 +1046,13 @@ def _skeleton_metrics_fast(subject: str, map_arrays: Dict[str, np.ndarray], skel
 
 
 def _remove_small_or_flat_components(binary_array: np.ndarray) -> None:
-    """In place: drop 6-connected components with < 4 voxels or flat in one axis.
+    """In place: drop 26-connected components with < 4 voxels or flat in one axis.
 
     Equivalent to the legacy per-component loop (boolean mask + argwhere of the
     whole volume for every component) using one bincount and the components'
     bounding boxes: ptp(coords, axis) == 0 on some axis  <=>  bbox extent == 1.
     """
-    labeled, n = ndimage.label(binary_array)
+    labeled, n = ndimage.label(binary_array, structure=STRUCTURE_26)
     if n == 0:
         return
     sizes = np.bincount(labeled.ravel(), minlength=n + 1)
@@ -1211,23 +1063,6 @@ def _remove_small_or_flat_components(binary_array: np.ndarray) -> None:
             drop[comp_id] = True
     if drop.any():
         binary_array[drop[labeled]] = 0
-
-
-def _dilate_cropped(mask: np.ndarray, iterations: int) -> np.ndarray:
-    """ndimage.binary_dilation(mask, iterations) inside the mask's bounding box.
-
-    Dilation is local and the default border value is 0, so a bounding box with
-    an (iterations + 1)-voxel margin gives the identical result for a fraction
-    of the cost of a full-volume pass.
-    """
-    out = np.zeros(mask.shape, dtype=bool)
-    nz = np.nonzero(mask)
-    if len(nz[0]) == 0:
-        return out
-    m = iterations + 1
-    box = tuple(slice(max(int(a.min()) - m, 0), min(int(a.max()) + m + 1, s)) for a, s in zip(nz, mask.shape))
-    out[box] = ndimage.binary_dilation(input=mask[box], iterations=iterations)
-    return out
 
 
 def _skeletonize_cropped(mask: np.ndarray) -> np.ndarray:
@@ -1263,6 +1098,7 @@ class InputBundle:
     binary_lesion_arrays: Dict[str, np.ndarray]
     dilated_lesion_arrays: Dict[str, np.ndarray]
     penumbras_arrays: Dict[str, np.ndarray]
+    distance_maps: Dict[str, np.ndarray]    # mm to the nearest lesion voxel, per lesion set
     tract_arrays: Dict[str, np.ndarray]
     thresholded_tract_arrays: Dict[str, np.ndarray]
     tract_binary_arrays: Dict[str, np.ndarray]
@@ -1271,189 +1107,11 @@ class InputBundle:
     skeleton_array: Optional[np.ndarray]
     voxel_vol: float
     tract_atlas_files_dict: Dict[str, str]
+    ventricle_array: Optional[np.ndarray]
     # Path to tracts.trk for each tract (None when atlas fallback was used)
     tract_trk_files: Dict[str, Optional[str]]
     # Origin of each tract: "tractography" or "atlas"
     tract_source: Dict[str, str] = field(default_factory=dict)
-
-def _compute_tract_level_metrics_legacy(args, inputs: "InputBundle") -> pd.DataFrame:
-    """Dense reference implementation of the tract-level metrics loop.
-
-    Verbatim copy of the original loop from main(); used as the fallback when
-    the fast sparse path cannot be proven equivalent (NaN/Inf in an input).
-    """
-    tract_level_metrics_df = pd.DataFrame()
-
-    for tract_name, tract_array in inputs.tract_arrays.items():
-        source = inputs.tract_source.get(tract_name, "tractography")
-        tract_row = {
-            "subject": args.subject,
-            "tract_name": tract_name,
-            "tract_source": source,
-            "used_atlas": source == "atlas",
-            "tract_volume_mm3": float(np.sum(tract_array > 0)) * inputs.voxel_vol,
-        }
-
-        # Sanity check if there are negative values in the tract array, which should not be the case for probability maps.
-        if np.any(tract_array < 0):
-            logger.warning(f"Warning: Tract '{tract_name}' contains negative values; check input data.")
-
-        for lesion_name, lesion_array in inputs.lesion_arrays.items():
-            # Sanity check if there are negative values in the lesion array, which should not be the case for probability maps.
-            if np.any(lesion_array < 0):
-                logger.warning(f"Warning: Lesion '{lesion_name}' contains negative values; check input data.")
-
-            # Compute lesion load details for tract-lesion.
-            tract_lesion_load_details = _compute_lesion_tract_intersection_details(
-                lesion_array=lesion_array,
-                tract_array=tract_array,
-                voxel_vol_mm3=inputs.voxel_vol,
-            )
-
-            # Compute tract-lesion distance metrics.
-            tract_lesion_distance_metrics = _compute_tract_distance_metrics(
-                tract_array=tract_array,
-                lesion_array=lesion_array,
-                voxel_sizes=inputs.ref_img.header.get_zooms()[:3],
-            )
-
-            tract_pd_lesion_pd = tract_array * lesion_array
-            tract_binary_lesion_binary = inputs.tract_binary_arrays[tract_name] * inputs.binary_lesion_arrays[lesion_name]
-            tract_pd_lesion_binary = tract_array * inputs.binary_lesion_arrays[lesion_name]
-            tract_pd_lesion_dilated = tract_array * inputs.dilated_lesion_arrays[lesion_name]
-            tract_binary_lesion_dilated = inputs.tract_binary_arrays[tract_name] * inputs.dilated_lesion_arrays[lesion_name]
-            tract_pd_lesion_penumbra = tract_array * inputs.penumbras_arrays[lesion_name]
-            tract_binary_penumbra = inputs.tract_binary_arrays[tract_name] * inputs.penumbras_arrays[lesion_name]
-
-            # Get lesions that overlap with the tract (including lesion areas outside the tract)
-            # Connected components on lesion mask
-            lesions_labels, _ = cast(
-                Tuple[np.ndarray, int],
-                ndimage.label(inputs.binary_lesion_arrays[lesion_name]),
-            )
-            # IDs of lesion components that overlap this tract
-            overlap_component_ids = np.unique(lesions_labels * tract_binary_lesion_binary)
-            overlap_component_ids = overlap_component_ids[overlap_component_ids != 0]
-        
-            whole_overlapping_lesions_binary = np.isin(lesions_labels, overlap_component_ids).astype(np.uint8)
-
-            # Get summary stats for tract-lesion intersection.
-            # Importance in tract (Tract PD) x Importance in lesion (Lesion PD)
-            # Tract PD x Lesion PD
-            stats_tract_pd_lesion_pd = _summary_nonzero(tract_pd_lesion_pd)
-            # Tract PD x Lesion binary
-            stats_tract_pd_lesion_binary = _summary_nonzero(tract_pd_lesion_binary)
-            # Tract PD x Dilated lesion
-            stats_tract_pd_lesion_dilated = _summary_nonzero(tract_pd_lesion_dilated)
-            # Tract PD x Penumbra
-            stats_tract_pd_lesion_penumbra = _summary_nonzero(tract_pd_lesion_penumbra)
-
-            # Change: Tract PD x Lesion binary
-            change_tract_pd_lesion = _summary_change_nonzero(
-                lesion_map=lesion_array, values_b=tract_array)
-            
-            tract_lesion_metrics = {
-                "tract_pd_lesion_pd": stats_tract_pd_lesion_pd,
-                "tract_pd_lesion_binary": stats_tract_pd_lesion_binary,
-                "tract_pd_lesion_dilated": stats_tract_pd_lesion_dilated,
-                "tract_pd_lesion_penumbra": stats_tract_pd_lesion_penumbra,
-                "tract_pd_change_lesion_binary": change_tract_pd_lesion,
-            }
-
-            # Add lesion load metrics to row
-            for detail_key, detail_val in tract_lesion_load_details.items():
-                tract_row[f"{lesion_name}_{detail_key}"] = detail_val
-            
-            # Add distance metrics to row
-            for distance_key, distance_val in tract_lesion_distance_metrics.items():
-                tract_row[f"{lesion_name}_{distance_key}"] = distance_val
-
-            # Add tract-lesion metrics to row 
-            for suffix, metrics in tract_lesion_metrics.items():
-                for metric_name, metric_value in metrics.items():
-                    tract_row[f"{lesion_name}_{suffix}_{metric_name}"] = metric_value
-            
-
-            for map_name, map_array in inputs.map_arrays.items():
-                # Tract-lesion map stats.
-                map_tract_pd = map_array * tract_array
-                map_tract_pd_lesion_pd = map_array * tract_pd_lesion_pd
-                map_tract_binary_lesion_binary = map_array * tract_binary_lesion_binary
-                map_tract_pd_dilated_lesion = map_array * tract_pd_lesion_dilated
-                map_tract_binary_dilated_lesion = map_array * tract_binary_lesion_dilated
-                map_tract_pd_penumbra = map_array * tract_pd_lesion_penumbra
-                map_tract_binary_penumbra = map_array * tract_binary_penumbra
-
-                map_tract_whole_overlapping_lesions_binary = map_array * whole_overlapping_lesions_binary
-
-                # Map x Tract PD x Lesion PD
-                stats_map_tract_pd_lesion_pd = _summary_nonzero(map_tract_pd_lesion_pd)
-                # Map x Tract Binary x Lesion binary
-                stats_map_tract_binary_lesion_binary = _summary_nonzero(map_tract_binary_lesion_binary)
-                # Map x Tract PD x Dilated lesion
-                stats_map_tract_pd_dilated_lesion = _summary_nonzero(map_tract_pd_dilated_lesion)
-                # Map x Tract Binary x Dilated lesion
-                stats_map_tract_binary_dilated_lesion = _summary_nonzero(map_tract_binary_dilated_lesion)
-                # Map x Tract PD x Penumbra
-                stats_map_tract_pd_penumbra = _summary_nonzero(map_tract_pd_penumbra)
-                # Map x Tract Binary x Penumbra
-                stats_map_tract_binary_penumbra = _summary_nonzero(map_tract_binary_penumbra)
-                # Map x Tract Binary x Whole overlapping lesions
-                stats_map_tract_binary_whole_overlapping_lesions = _summary_nonzero(map_tract_whole_overlapping_lesions_binary)
-                
-                # Change: Map x Tract PD x Lesion binary
-                change_map_tract_pd_lesion = _summary_change_nonzero(
-                    lesion_map=lesion_array, values_b=map_tract_pd)
-                
-                tract_lesion_metrics_map = {
-                    "map_tract_pd_lesion_pd": stats_map_tract_pd_lesion_pd,
-                    "map_tract_binary_lesion_binary": stats_map_tract_binary_lesion_binary,
-                    "map_tract_pd_dilated_lesion": stats_map_tract_pd_dilated_lesion,
-                    "map_tract_binary_dilated_lesion": stats_map_tract_binary_dilated_lesion,
-                    "map_tract_pd_penumbra": stats_map_tract_pd_penumbra,
-                    "map_tract_binary_penumbra": stats_map_tract_binary_penumbra,
-                    "map_tract_pd_change_lesion_binary": change_map_tract_pd_lesion,
-                    "map_tract_binary_whole_overlapping_lesions": stats_map_tract_binary_whole_overlapping_lesions,
-                }
-                # Add map-tract-lesion metrics to row with lesion and map-specific prefix.
-                for suffix, metrics in tract_lesion_metrics_map.items():
-                    for metric_name, metric_value in metrics.items():
-                        tract_row[f"{map_name}_{lesion_name}_{suffix}_{metric_name}"] = metric_value
-                
-        for map_name, map_array in inputs.map_arrays.items():
-            # Sanity check if there are negative values in the map array, which should not be the case for probability maps.
-            if np.any(map_array < 0):
-                logger.warning(f"Warning: Map '{map_name}' contains negative values; check input data.")
-
-            # Whole-tract map stats.
-            map_tract_pd = map_array * tract_array
-            map_tract_binary = map_array * inputs.tract_binary_arrays[tract_name]
-            map_tract_skeletonised = inputs.tract_skeletons_arrays[tract_name] * map_array
-
-            # Map x Tract PD
-            stats_map_tract_pd = _summary_nonzero(map_tract_pd)
-            # Map x Tract Binary
-            stats_map_tract_binary = _summary_nonzero(map_tract_binary)
-            # Map x Tract Skeleton
-            stats_map_tract_skeletonised = _summary_nonzero(map_tract_skeletonised)
-
-            tract_array_metrics_map = {
-                "map_tract_pd": stats_map_tract_pd,
-                "map_tract_binary": stats_map_tract_binary,
-                "map_tract_skeletonised": stats_map_tract_skeletonised,
-            }
-
-            # Add map-tract metrics to row with map-specific prefix.
-            for suffix, metrics in tract_array_metrics_map.items():
-                for metric_name, metric_value in metrics.items():
-                    tract_row[f"{map_name}_{suffix}_{metric_name}"] = metric_value
-
-        tract_level_metrics_df = pd.concat(
-            [tract_level_metrics_df, pd.DataFrame([tract_row])],
-            ignore_index=True,
-        )
-
-    return tract_level_metrics_df
 
 # ============================================================================
 # Input Loading
@@ -1517,6 +1175,15 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
     ref_img = _load(t1_files[0])
     logger.info("Reference T1 shape: %s  zooms: %s", ref_img.shape, ref_img.header.get_zooms()[:3])
 
+    ventricle_array: Optional[np.ndarray] = None
+    if getattr(args, "parcellation_path", None) and getattr(args, "ventricle_labels", None):
+        parcellation_files = _expand_path_spec(args.parcellation_path)
+        if parcellation_files:
+            ventricle_array = _ventricle_mask(parcellation_files[0], args.ventricle_labels, ref_img)
+        else:
+            logger.warning("No parcellation found at %s; periventricular / deep lesion volumes are not computed.",
+                           args.parcellation_path)
+
     # Load critical arrays once for reuse across metric families ───────────
     brain_array: Optional[np.ndarray] = None
 
@@ -1524,6 +1191,7 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
     binary_lesion_arrays: Dict[str, np.ndarray] = {}
     dilated_lesion_arrays: Dict[str, np.ndarray] = {}
     penumbras_arrays: Dict[str, np.ndarray] = {}
+    distance_maps: Dict[str, np.ndarray] = {}
 
     tract_arrays: Dict[str, np.ndarray] = {}
     thresholded_tract_arrays: Dict[str, np.ndarray] = {}
@@ -1558,8 +1226,12 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
         _remove_small_or_flat_components(binary_array)
         lesion_array = lesion_array * binary_array  # zero PD where components were removed
 
-        dilated_array = _dilate_cropped(binary_array, iterations=3)
-        penumbra_array = np.where(dilated_array - binary_array > 0, 1, 0)
+        # Tissue around the lesions, by distance in mm (not by a number of voxels): penumbra = within DILATION_MM of a
+        # lesion but not lesion; dilated lesion = lesion + penumbra.
+        distance_map = _distance_to_lesion(binary_array, ref_img.header.get_zooms()[:3])
+        dilated_array = (distance_map <= DILATION_MM).astype(np.uint8)
+        penumbra_array = ((distance_map > 0) & (distance_map <= DILATION_MM)).astype(np.uint8)
+        distance_maps[lesion_name] = distance_map
 
         lesion_arrays[lesion_name] = lesion_array
         binary_lesion_arrays[lesion_name] = binary_array
@@ -1696,6 +1368,7 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
         binary_lesion_arrays=binary_lesion_arrays,
         dilated_lesion_arrays=dilated_lesion_arrays,
         penumbras_arrays=penumbras_arrays,
+        distance_maps=distance_maps,
         tract_arrays=tract_arrays,
         thresholded_tract_arrays=thresholded_tract_arrays,
         tract_binary_arrays=tract_binary_arrays,
@@ -1704,6 +1377,7 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
         skeleton_array=skeleton_array,
         voxel_vol=voxel_vol,
         tract_atlas_files_dict=tract_atlas_files_dict,
+        ventricle_array=ventricle_array,
         tract_trk_files=tract_trk_files,
         tract_source=tract_source,
     )
@@ -1743,6 +1417,17 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--skeleton-path", required=False, default=None,
         help="Skeleton mask file / dir / glob (optional)",
+    )
+
+    parser.add_argument(
+        "--parcellation-path", required=False, default=None,
+        help="Label image (GIF / NeuroMorph or FreeSurfer aparc+aseg) in any space; with --ventricle-labels it gives the "
+             "ventricle mask for the periventricular and deep lesion volumes (optional).",
+    )
+    parser.add_argument(
+        "--ventricle-labels", required=False, default=None,
+        help="Comma-separated label values of the ventricles in --parcellation-path "
+             "(GIF: 50,51,52,53; FreeSurfer: 4,5,43,44).",
     )
 
     parser.add_argument(
@@ -1819,23 +1504,16 @@ def main() -> int:
             voxel_vol=inputs.voxel_vol,
         )
 
-    # Fast (sparse) path guard: see the FAST PATH note above _flat(). Falls back
-    # to the dense reference implementation if any input holds NaN/Inf.
-    use_fast = _inputs_are_finite(
-        list(inputs.map_arrays.values()) + list(inputs.tract_arrays.values())
-        + list(inputs.lesion_arrays.values())
-    )
-    if not use_fast:
-        logger.warning("Non-finite values found in an input array; using the dense (slow) metrics path.")
     # Per-lesion-set supports / labelling / distance transform, built once and
     # shared by every consumer below (whole-brain, tract-level).
-    lesion_contexts: Dict[str, _LesionContext] = {}
-    if use_fast:
-        for _ln in inputs.lesion_arrays:
-            lesion_contexts[_ln] = _LesionContext(
-                inputs.lesion_arrays[_ln], inputs.binary_lesion_arrays[_ln],
-                inputs.dilated_lesion_arrays[_ln], inputs.penumbras_arrays[_ln],
-            )
+    lesion_contexts: Dict[str, _LesionContext] = {
+        _ln: _LesionContext(
+            inputs.lesion_arrays[_ln], inputs.binary_lesion_arrays[_ln],
+            inputs.dilated_lesion_arrays[_ln], inputs.penumbras_arrays[_ln],
+            distance=inputs.distance_maps.get(_ln),
+        )
+        for _ln in inputs.lesion_arrays
+    }
 
     # ── Metric family: whole-brain ───────────────────────────────────────────
     wb_df = _compute_whole_brain_metrics(
@@ -1845,6 +1523,12 @@ def main() -> int:
         voxel_vol_mm3=inputs.voxel_vol,
     )
  
+    if inputs.ventricle_array is not None:
+        for _ln, _lesion in inputs.lesion_arrays.items():
+            for _k, _v in _periventricular_deep_metrics(
+                    _ln, _lesion, inputs.ventricle_array, inputs.ref_img.header.get_zooms()[:3], inputs.voxel_vol).items():
+                wb_df[_k] = _v
+
     # Write whole-brain metrics.
     wb_csv = metrics_dir / "whole_brain_metrics.csv"
     print("✓ Whole Brain Metrics CSV saved")
@@ -1858,17 +1542,14 @@ def main() -> int:
     # with no extra Snakemake-triggered reruns; declaring it as a tracked
     # output later is a separate, deliberate step for backfilling subjects
     # that finish before that point.
-    _wb_lesion_fn = (_compute_whole_brain_lesion_microstructure_metrics_fast if use_fast
-                     else _compute_whole_brain_lesion_microstructure_metrics)
-    _wb_kwargs = {"lesion_contexts": lesion_contexts} if use_fast else {}
-    wb_lesion_df = _wb_lesion_fn(
+    wb_lesion_df = _compute_whole_brain_lesion_microstructure_metrics_fast(
         subject=args.subject,
         map_arrays=inputs.map_arrays,
         lesion_arrays=inputs.lesion_arrays,
         binary_lesion_arrays=inputs.binary_lesion_arrays,
         penumbras_arrays=inputs.penumbras_arrays,
         dilated_lesion_arrays=inputs.dilated_lesion_arrays,
-        **_wb_kwargs,
+        lesion_contexts=lesion_contexts,
     )
     wb_lesion_csv = metrics_dir / "whole_brain_lesion_metrics.csv"
     print("✓ Whole Brain Lesion Microstructure Metrics CSV saved")
@@ -1877,21 +1558,8 @@ def main() -> int:
     # ── Peak width of Whole skeleton of tracts ───────────────────────────────────────────
     # Always written (empty DataFrame when no skeleton) so Snakemake can require the file.
     skeleton_metrics_df = pd.DataFrame()
-    if inputs.skeleton_array is not None and use_fast and _inputs_are_finite([inputs.skeleton_array]):
+    if inputs.skeleton_array is not None:
         skeleton_metrics_df = _skeleton_metrics_fast(args.subject, inputs.map_arrays, inputs.skeleton_array)
-    elif inputs.skeleton_array is not None:
-        rows: List[Dict[str, Any]] = []
-        for map_name, map_array in inputs.map_arrays.items():
-            skeleton_map = map_array * inputs.skeleton_array
-            stats_skeleton_map = _summary_nonzero(skeleton_map)
-
-            row = {"subject": args.subject, "map_name": map_name}
-            for stat_name, stat_value in stats_skeleton_map.items():
-                row[f"skeleton_{stat_name}"] = stat_value
-
-            rows.append(row)
-
-        skeleton_metrics_df = pd.DataFrame(rows)
 
     skeleton_csv = metrics_dir / "skeleton_metrics.csv"
     print("✓ Skeleton Metrics CSV saved")
@@ -1934,8 +1602,11 @@ def main() -> int:
             write_csv(tract_df, str(tract_csv))
 
             # Optional extension hook (see _load_optional_extension above).
+            # Label with 26-connectivity (STRUCTURE_26) so lesion_label 1..n_components matches lesion_df.
             if _extension is not None and hasattr(_extension, "on_lesion_ready"):
-                labeled_lesions, n_components = ndimage.label(inputs.binary_lesion_arrays[lesion_name])
+                labeled_lesions, n_components = ndimage.label(
+                    inputs.binary_lesion_arrays[lesion_name], structure=STRUCTURE_26
+                )
                 voxel_sizes = inputs.ref_img.header.get_zooms()[:3]
                 _extension.on_lesion_ready(
                     subject=args.subject,
@@ -1953,24 +1624,21 @@ def main() -> int:
                 )
 
     # ── Tract-level metrics ──────────────────────────────────────────────────
-    if use_fast:
-        tract_level_metrics_df = _compute_tract_level_metrics_fast(
-            subject=args.subject,
-            tract_arrays=inputs.tract_arrays,
-            tract_binary_arrays=inputs.tract_binary_arrays,
-            tract_skeletons_arrays=inputs.tract_skeletons_arrays,
-            tract_source=inputs.tract_source,
-            lesion_arrays=inputs.lesion_arrays,
-            binary_lesion_arrays=inputs.binary_lesion_arrays,
-            dilated_lesion_arrays=inputs.dilated_lesion_arrays,
-            penumbras_arrays=inputs.penumbras_arrays,
-            map_arrays=inputs.map_arrays,
-            voxel_vol=inputs.voxel_vol,
-            voxel_sizes=inputs.ref_img.header.get_zooms()[:3],
-            lesion_contexts=lesion_contexts,
-        )
-    else:
-        tract_level_metrics_df = _compute_tract_level_metrics_legacy(args, inputs)
+    tract_level_metrics_df = _compute_tract_level_metrics_fast(
+        subject=args.subject,
+        tract_arrays=inputs.tract_arrays,
+        tract_binary_arrays=inputs.tract_binary_arrays,
+        tract_skeletons_arrays=inputs.tract_skeletons_arrays,
+        tract_source=inputs.tract_source,
+        lesion_arrays=inputs.lesion_arrays,
+        binary_lesion_arrays=inputs.binary_lesion_arrays,
+        dilated_lesion_arrays=inputs.dilated_lesion_arrays,
+        penumbras_arrays=inputs.penumbras_arrays,
+        map_arrays=inputs.map_arrays,
+        voxel_vol=inputs.voxel_vol,
+        voxel_sizes=inputs.ref_img.header.get_zooms()[:3],
+        lesion_contexts=lesion_contexts,
+    )
 
     # Write tract-level metrics.
     tract_csv = metrics_dir / "tract_level_metrics.csv"

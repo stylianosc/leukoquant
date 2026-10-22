@@ -130,27 +130,43 @@ def _calculate_fractal_dimension(lesion_coords, volume_shape):
     lesion_coords: (N, 3) integer voxel coordinates of the lesion.
     volume_shape:  shape of the FULL volume the legacy code padded (needed so
                    the box edges, and therefore the dropped-voxel behaviour, match).
+
+    Only box sizes up to half the lesion's longest extent are used: a box larger than the lesion contains all of it, so
+    the count is 1 whatever its shape, and including such sizes flattens the fitted slope (most lesions here are a few
+    voxels across). At least three box sizes are needed; a lesion that is too small for that, with fewer than 6 voxels
+    or with a longest extent under 4 voxels, has no defined dimension and gets 0.0.
     """
-    if len(lesion_coords) < 6:
-        return 0
-
+    coords = np.asarray(lesion_coords)
+    if len(coords) < 6:
+        return 0.0
+    extent = float((coords.max(axis=0) - coords.min(axis=0) + 1).max())
+    if extent < 4:
+        return 0.0
     scales = _fractal_scales()
-    final_concat = _count_occupied_boxes(lesion_coords, volume_shape, scales).T  # (scales, offsets)
-    min_boxes = np.min(final_concat, 1)
+    scales = scales[scales <= extent / 2.0]
+    if len(scales) < 3:
+        return 0.0
 
-    # linear fit, polynomial of degree 1 (the legacy NaN-pair removal was dead
-    # code -- its result was never used -- and is intentionally dropped)
+    min_boxes = np.min(_count_occupied_boxes(coords, volume_shape, scales).T, 1)
+    if np.any(min_boxes <= 0):
+        return 0.0
+    # linear fit, polynomial of degree 1; the fractal dimension is the OPPOSITE of the fitting coefficient
     coeffs = np.polyfit(np.log(scales), np.log(min_boxes), 1)
-
-    # the fractal dimension is the OPPOSITE of the fitting coefficient
-    return -1 * coeffs[0]
+    return float(-1 * coeffs[0])
 
 
 # ----------------------------------------------------------------------------
 # Small helpers (unchanged semantics)
 # ----------------------------------------------------------------------------
 
-def _calculate_coalescence_score(lesion_volume_tiv_normalized_mm3, volume_after_erosion, lesion_volume_mm3, lesion_after_erosion):
+def _calculate_coalescence_score(lesion_volume_pct_tiv, volume_after_erosion, lesion_volume_mm3, lesion_after_erosion):
+    """Ordinal coalescence score 0-4 of one lesion, from its size and how much of it survives one erosion.
+
+    `lesion_volume_pct_tiv` is the lesion volume as a PERCENTAGE of the total intracranial volume (the size bands 0.05, 0.4
+    and 1.35 are percentages). The caller used to pass the plain fraction (volume / TIV), about 100 times too small, which
+    left every lesion in the lowest size band: only the scores 0 and 1 could occur.
+    """
+    lesion_volume_tiv_normalized_mm3 = lesion_volume_pct_tiv
     coalescence_score = None
     if lesion_after_erosion == "Vanished":
         coalescence_score = 0
@@ -196,6 +212,21 @@ def _surface_area_from_mask(sub_mask, voxel_sizes=(1.0, 1.0, 1.0)):
     return nx * (dy * dz) + ny * (dx * dz) + nz * (dx * dy)
 
 
+def _mesh_surface_area(sub_mask, voxel_sizes=(1.0, 1.0, 1.0)):
+    """Surface area (mm^2) of a binary mask from a triangle mesh of its boundary (marching cubes at half a voxel).
+
+    Counting exposed voxel faces measures the staircase of the voxel grid, about 1.5 times the true area for a smooth
+    object, so sphericity and compactness came out biased. The mesh is the standard remedy (e.g. in radiomics). The mask
+    must carry a zero margin. If a mesh cannot be built (degenerate shapes) the exposed-face count is used.
+    """
+    try:
+        verts, faces, _, _ = skimage.measure.marching_cubes(
+            np.asarray(sub_mask, dtype=np.float32), level=0.5, spacing=tuple(float(v) for v in voxel_sizes))
+        return float(skimage.measure.mesh_surface_area(verts, faces))
+    except (ValueError, RuntimeError):
+        return float(_surface_area_from_mask(sub_mask, voxel_sizes))
+
+
 def _calculate_surface_area(lesion_mask, voxel_sizes=(1.0, 1.0, 1.0)):
     """Surface area of a full-size binary lesion mask (kept for API parity)."""
     padded = np.pad((lesion_mask == 1), 1)
@@ -205,20 +236,20 @@ def _calculate_surface_area(lesion_mask, voxel_sizes=(1.0, 1.0, 1.0)):
 def _compute_image_stats(values: np.ndarray) -> dict:
     """Summary statistics for a 1D array of values (NaNs for an empty array).
 
-    Same keys / values as the legacy function; the four percentiles are taken
-    in one np.percentile call (one partition instead of four).
+    Same statistics as the region summaries (p5 and p95 instead of min and max); the four percentiles are taken in one
+    np.percentile call (one partition instead of four).
     """
     if len(values) == 0:
         return {k: np.nan for k in (
-            "mean", "median", "std", "min", "max", "25th", "75th", "IQR",
+            "mean", "median", "std", "p5", "p95", "25th", "75th", "IQR",
             "peak_width", "kurtosis", "skew")}
     p5, p25, p75, p95 = np.percentile(values, [5, 25, 75, 95])
     return {
         "mean": np.mean(values),
         "median": np.median(values),
         "std": np.std(values),
-        "min": np.min(values),
-        "max": np.max(values),
+        "p5": p5,
+        "p95": p95,
         "25th": p25,
         "75th": p75,
         "IQR": p75 - p25,
@@ -307,9 +338,11 @@ def _compute_lesion_metrics(
     e_lab = lab_ero_sub[in_lesion]
 
     # dilated: (number of lesion voxels inside each dilated component, new label per lesion)
-    dil_voxel_count = np.bincount(d_lab, minlength=n_dil + 1)
     orig_to_dil = np.zeros(lesion_labels_count + 1, dtype=np.int64)
     orig_to_dil[o_lab] = d_lab
+    # number of distinct lesions inside each dilated component (the old code counted lesion VOXELS, which is > 1 for every
+    # lesion, so "merged" was always true)
+    lesions_per_dil = np.bincount(orig_to_dil[1:], minlength=n_dil + 1)
     dil_comp_size = np.bincount(lab_dil_sub.ravel(), minlength=n_dil + 1)
 
     # eroded: number of eroded voxels per lesion, distinct eroded labels per lesion
@@ -373,14 +406,18 @@ def _compute_lesion_metrics(
 
         # Surface area (count exposed faces) on the bbox + 1-voxel zero margin
         sub = np.pad(lab_sub_of(lesion_labels, sl_box) == lesion_label, 1)
-        surface_area = _surface_area_from_mask(sub, voxel_sizes=voxel_sizes)
+        surface_area = _mesh_surface_area(sub, voxel_sizes=voxel_sizes)
+        # Thickness: distance (mm) from the lesion's deepest voxel to the nearest voxel outside it.
+        max_inscribed_radius_mm = float(ndimage.distance_transform_edt(sub, sampling=voxel_sizes).max())
 
         # Coalescence (after dilation)
         new_label = orig_to_dil[lesion_label]
         merged_after_dilation = False
         merged_after_dilation_volume = 0
+        n_lesions_merged = 1
         if new_label != 0:
-            merged_after_dilation = bool(dil_voxel_count[new_label] > 1)
+            n_lesions_merged = int(lesions_per_dil[new_label])
+            merged_after_dilation = n_lesions_merged > 1
             merged_after_dilation_volume = np.int64(dil_comp_size[new_label]) * voxel_volume
 
         # Erosion
@@ -396,7 +433,8 @@ def _compute_lesion_metrics(
             volume_after_erosion_mm3 = np.int64(max_ero_size[lesion_label]) * voxel_volume
 
         # Coalescence score
-        coalescence_score = _calculate_coalescence_score(lesion_volume_tiv_normalized_mm3, volume_after_erosion_mm3, lesion_volume_mm3, lesion_after_erosion)
+        coalescence_score = _calculate_coalescence_score(
+            lesion_volume_tiv_normalized_mm3 * 100.0, volume_after_erosion_mm3, lesion_volume_mm3, lesion_after_erosion)
 
         # Fractal dimension (from voxel coordinates; box edges from the full shape)
         fractal_dimension = _calculate_fractal_dimension(lesion_coords, shape)
@@ -407,10 +445,13 @@ def _compute_lesion_metrics(
         # Tract match: tract with the largest overlap (first tract wins ties,
         # like max() over the insertion-ordered dict did); 'No Tract' if none.
         overlaps = counts[:, lesion_label]
-        if overlaps.size and overlaps.max() > 0:
-            most_common_tract_name = tract_names[int(np.argmax(overlaps))]
-        else:
-            most_common_tract_name = "No Tract"
+        ranked = np.argsort(-overlaps, kind="stable")[:3]       # largest overlap first; the first tract wins ties
+        matches = [
+            (tract_names[int(i)], float(overlaps[i]) / float(lesion_volume_voxels)) if overlaps[i] > 0 else ("No Tract", 0.0)
+            for i in ranked
+        ]
+        matches += [("No Tract", 0.0)] * (3 - len(matches))
+        most_common_tract_name = matches[0][0]
 
         overall = {
             # --- Location / identity metrics ---
@@ -421,6 +462,11 @@ def _compute_lesion_metrics(
 
             # --- Tract / anatomical matching ---
             "tract_match": most_common_tract_name,
+            "tract_match_overlap_fraction": matches[0][1],      # share of the lesion's voxels inside that tract
+            "tract_match_2": matches[1][0],
+            "tract_match_2_overlap_fraction": matches[1][1],
+            "tract_match_3": matches[2][0],
+            "tract_match_3_overlap_fraction": matches[2][1],
 
             # --- Volume & coalescence metrics (physical units: mm^3) ---
             "volume_mm3": lesion_volume_mm3,
@@ -431,12 +477,14 @@ def _compute_lesion_metrics(
 
             # --- Merge flag ---
             "merged_after_dilation": merged_after_dilation,
+            "n_lesions_merged_after_dilation": n_lesions_merged,
 
             # --- Shape / geometry metrics ---
             "volume_convex_hull_mm3": getattr(region_prop_temp, "convex_area", np.nan) * voxel_volume,
             "convex_deficiency_mm3": (getattr(region_prop_temp, "convex_area", 0) - getattr(region_prop_temp, "area", 0)) * voxel_volume,
             "equivalent_diameter_mm": ( (6 * lesion_volume_mm3 / np.pi) ** (1/3) ) if lesion_volume_mm3 > 0 else np.nan,
             "surface_area": surface_area,
+            "max_inscribed_radius_mm": max_inscribed_radius_mm,
             "compactness": surface_area ** 3 / lesion_volume_mm3 ** 2 if lesion_volume_mm3 > 0 else np.nan,
             "sphericity": np.pi ** (1 / 3) * (6 * lesion_volume_mm3) ** (2 / 3) / surface_area if surface_area > 0 else np.nan,
             "euler_number": getattr(region_prop_temp, "euler_number", np.nan),

@@ -7,6 +7,29 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.0] - 2026-10-22
+
+### Changed (metric values and columns differ from 2.0.0)
+- **Skeleton statistics** (`skeleton_*`, including PSMD and the mean skeleton FA / MD) are statistics of the map on a binary skeleton. Before, the thin binary skeleton was resampled to T1 space with linear interpolation and its fractional values multiplied the map. The skeleton is now resampled with nearest neighbour and thresholded at 0.5.
+- **Lesion-versus-outside change**: the `(inside - outside) / (inside + outside)` ratios (`*_change`, `*_change_absolute`) are replaced by `*_diff` (inside minus reference, 10 statistics) and `auc` (probability that a lesion voxel exceeds a reference voxel) per map, computed against the tract's normal-appearing white matter (NAWM). The ratio is unbounded for signed maps such as Z-score maps (11-18% of values lay outside [-1, 1]).
+- Region summaries report `p5` and `p95` instead of `min` and `max`, plus `n_voxels`; empty regions stay 0.0.
+- Statistics of a map weighted by tract or lesion probability are probability-weighted (weighted mean, standard deviation, percentiles, shape) instead of statistics of map x probability.
+- Penumbra and dilated lesion are defined by distance (3 mm), not by three voxel dilations.
+- Lesion components are 26-connected everywhere (the tract metrics used 6-connectivity).
+- Per-lesion: `merged_after_dilation` counts distinct lesions (it was always true); coalescence size bands are percentages of TIV (only the scores 0 and 1 could occur); fractal dimension uses box sizes that fit the lesion; surface area (and compactness, sphericity) from a mesh instead of exposed voxel faces; the three best-matching tracts are reported.
+- Tract-to-lesion distance: nearest, mean and fraction within 5 mm replace the distance of the tract's centre of mass; the distance of a subject without lesion is the 100 mm cap (it was a meaningless border distance).
+- `volume_tiv_normalised_mm3` removed (it equals `load_pct` / 100).
+- NaN / Inf voxels in inputs are treated as missing data (set to 0, logged); the dense fallback implementations are removed.
+
+### Added
+- Penumbra rings 3-6 and 6-9 mm and the NAWM region with their statistics.
+- Per-lesion `n_lesions_merged_after_dilation`, `max_inscribed_radius_mm`.
+- Tract: share of the tract's streamline density inside lesions.
+- Whole brain: lesion count, mean lesion volume; periventricular and deep lesion volumes and share (from `--parcellation-path` and `--ventricle-labels`).
+- `metrics_output_dir` (process-all configuration): the metrics step writes its folders there, nothing existing is overwritten.
+- Force guard for `process-all --force`: the run is planned first and refused when a stage upstream of the forced ones would also rerun (typically through newer modification times after a fresh clone); `--dry-run` prints the per-rule job counts and writes Snakemake's full plan with the reason of every job (`dry_run_plan.txt`), `--allow-upstream-rerun` overrides the refusal, and `--only-forced` plans and runs only the forced stages whatever the modification times say.
+- The metrics output root is mounted in the container (`/metrics_output`) when `metrics_output_dir` is set.
+
 ## [2.0.0] - 2026-10-14
 
 ### Changed (metric values differ from 1.x)

@@ -13,7 +13,7 @@ import sys
 import tempfile
 import traceback
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import yaml
 from snakemake.api import SnakemakeApi
@@ -58,9 +58,12 @@ from snakemake_executor_plugin_sge import ExecutorSettings as SgeExecutorSetting
 
 from leukoquant.utils.subject_utils import read_subjects, resolve_subject_pattern
 from leukoquant.utils.external_utils import _resolve_gif_home, _resolve_fs_license
-from leukoquant.utils.bind_utils import consolidate_bind_entries
+from leukoquant.utils.bind_utils import consolidate_bind_entries, metrics_output_bind
 from leukoquant.utils.snakemake_utils import load_yaml_config, first_truthy, write_run_config
 from leukoquant.utils.dwi_utils import check_input_failure_marker
+from leukoquant.utils.force_guard import (
+    describe_unexpected, only_forced_rules, parse_job_stats, stage_of_rule, unexpected_upstream_rules,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -184,7 +187,11 @@ class ProcessAllProcessor:
                         force_rules: Optional[List[str]] = None,
                         verbose: bool = False,
                         use_gpu: bool = False,
-                        retry_input_failures: bool = False) -> Tuple[str, str]:
+                        retry_input_failures: bool = False,
+                        metrics_output_dir: Optional[str] = None,
+                        dry_run: bool = False,
+                        allow_upstream_rerun: bool = False,
+                        only_forced: bool = False) -> Tuple[str, str]:
         """Run process-all for one or more subjects in a single Snakemake call.
 
         All subjects share one DAG-build pass and one container-discovery step,
@@ -447,6 +454,8 @@ class ProcessAllProcessor:
             f"{str(fs_license_dir.absolute())}:/license/license.txt",
             f"{str(gif_software_path.absolute())}:/GIF",
         ]
+        # The metrics step may write to its own output root (metrics_output_dir); mount it too.
+        bind_entries += metrics_output_bind(metrics_output_dir, base_out)
 
         scratch_dir = Path("/scratch0") if Path("/scratch0").exists() else base_out / ".scratch"
         scratch_dir.mkdir(parents=True, exist_ok=True)
@@ -504,6 +513,8 @@ class ProcessAllProcessor:
             "containers": {"freesurfer_unified_container": "docker://stylianosc/compsvd:freesurfer"},
             "singularity_binds": zscore_singularity_binds,
             "skip_zscore": skip_zscore,
+            # Where the metrics step writes its folders (default: output_dir). Everything it reads stays under output_dir.
+            "metrics_output_dir": str(Path(metrics_output_dir).absolute()) if metrics_output_dir else None,
             "healthy_subjects_list": healthy_list_resolved,
             "demographics_csv": demographics_resolved,
             "covariates": _parse_covariates(covariates),
@@ -617,6 +628,68 @@ class ProcessAllProcessor:
             storage_settings = StorageSettings()
             executor = "local"
 
+        def _plan_job_counts() -> Tuple[Dict[str, int], str]:
+            """Jobs per rule that this run would submit, from a Snakemake dry run (nothing is executed or deleted).
+
+            Returns the counts and Snakemake's full plan text (every planned job with the reason it is planned)."""
+            plan_capture = tempfile.TemporaryFile(mode="w+b")
+            saved_out, saved_err = os.dup(1), os.dup(2)
+            os.dup2(plan_capture.fileno(), 1)
+            os.dup2(plan_capture.fileno(), 2)
+            try:
+                with SnakemakeApi(OutputSettings(dryrun=True)) as plan_snk:
+                    plan_dag = plan_snk.workflow(
+                        snakefile=wf_file,
+                        workdir=base_out,
+                        config_settings=ConfigSettings(configfiles=[Path(config_file)]),
+                        resource_settings=resource_settings,
+                        storage_settings=storage_settings,
+                        deployment_settings=deployment_settings,
+                    ).dag(
+                        dag_settings=DAGSettings(
+                            targets=["all"],
+                            forcerun=frozenset(force_rules or []),
+                            allowed_rules=only_forced_rules(force_rules) if (only_forced and force_rules) else frozenset(),
+                            rerun_triggers=frozenset({RerunTrigger.MTIME}),
+                        ),
+                    )
+                    plan_dag.execute_workflow(
+                        executor="dryrun",
+                        execution_settings=ExecutionSettings(keep_metadata=False, standalone=True),
+                        remote_execution_settings=RemoteExecutionSettings(),
+                        scheduling_settings=SchedulingSettings(),
+                        group_settings=GroupSettings(),
+                    )
+            finally:
+                os.dup2(saved_out, 1)
+                os.dup2(saved_err, 2)
+                os.close(saved_out)
+                os.close(saved_err)
+            plan_capture.seek(0)
+            plan_text = plan_capture.read().decode(errors="replace")
+            plan_capture.close()
+            return parse_job_stats(plan_text), plan_text
+
+        # A forced run must only recompute the forced stages and what depends on them. Plan it first and refuse
+        # when a stage upstream of the forced ones would also run: Snakemake deletes the outputs of every job it
+        # reruns, which destroyed finished TRACULA outputs on 2026-10-05 and 2026-10-18.
+        if dry_run or (force_rules and not allow_upstream_rerun):
+            job_counts, plan_text = _plan_job_counts()
+            if dry_run:
+                print("process-all dry run (jobs per rule, nothing submitted):")
+                for rule_name, n_jobs in sorted(job_counts.items()):
+                    print(f"  {rule_name}: {n_jobs}")
+                # The full plan, with the reason Snakemake gives for each job (which input is newer, which output is missing).
+                plan_dir = Path(metrics_output_dir).absolute() if metrics_output_dir else base_out
+                plan_file = plan_dir / "dry_run_plan.txt"
+                plan_file.write_text(plan_text)
+                print(f"full plan with reasons: {plan_file}")
+                return "0", str(base_out)
+            forced_stage_names = sorted({stage_of_rule(r) for r in force_rules} - {""})
+            unexpected = unexpected_upstream_rules(job_counts, forced_stage_names)
+            if unexpected:
+                raise RuntimeError(describe_unexpected(unexpected, forced_stage_names))
+
         try:
             # Redirect stdout and stderr at the OS file-descriptor level so
             # nothing from Snakemake or its plugins leaks to the terminal.
@@ -660,6 +733,7 @@ class ProcessAllProcessor:
                         dag_settings=DAGSettings(
                             targets=["all"],
                             forcerun=frozenset(force_rules or []),
+                            allowed_rules=only_forced_rules(force_rules) if (only_forced and force_rules) else frozenset(),
                             # Snakemake's default rerun_triggers includes CODE
                             # (and PARAMS/INPUT/SOFTWARE_ENV) on top of the
                             # always-on mtime staleness check -- meaning any
@@ -772,7 +846,11 @@ def apply_process_all(subject_input: Optional[str] = None,
                       verbose: bool = False,
                       config_yaml: Optional[str] = None,
                       gpu: bool = False,
-                      retry_input_failures: bool = False) -> dict:
+                      retry_input_failures: bool = False,
+                      metrics_output_dir: Optional[str] = None,
+                      dry_run: bool = False,
+                      allow_upstream_rerun: bool = False,
+                      only_forced: bool = False) -> dict:
     """Run the full process-all pipeline and return a summary dict.
 
     CLI / caller arguments take priority over values in ``config_yaml`` when
@@ -792,6 +870,7 @@ def apply_process_all(subject_input: Optional[str] = None,
     cores         = int(cores_raw) if cores_raw is not None else 1
     skip_zscore   = bool(yaml_cfg.get("skip_zscore", False)) or bool(skip_zscore)
     retry_input_failures = bool(yaml_cfg.get("retry_input_failures", False)) or bool(retry_input_failures)
+    metrics_output_dir = first_truthy(metrics_output_dir, yaml_cfg.get("metrics_output_dir"))
     healthy_list  = first_truthy(healthy_list,  yaml_cfg.get("healthy_list"), yaml_cfg.get("healthy_subjects_list"))
     demographics  = first_truthy(demographics,  yaml_cfg.get("demographics"), yaml_cfg.get("demographics_csv"))
     covariates    = first_truthy(covariates,    yaml_cfg.get("covariates"))
@@ -837,7 +916,13 @@ def apply_process_all(subject_input: Optional[str] = None,
             verbose=verbose,
             use_gpu=gpu,
             retry_input_failures=retry_input_failures,
+            metrics_output_dir=metrics_output_dir,
+            dry_run=dry_run,
+            allow_upstream_rerun=allow_upstream_rerun,
+            only_forced=only_forced,
         )
+        if dry_run:
+            return {"success": True, "results_dir": results_dir, "dry_run": True}
         print("✅ Full processing job submitted successfully", flush=True)
         return {"success": True, "results_dir": results_dir}
     except (EnvironmentError, FileNotFoundError) as e:

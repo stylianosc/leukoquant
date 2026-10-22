@@ -195,3 +195,26 @@ def consolidate_bind_entries(
         return path
 
     return new_bind_entries, remap
+
+
+# Container path of the separate output root of the metrics step (``metrics_output_dir``); the metrics rule
+# writes its outputs and logs below it (see metrics_workflow.smk).
+METRICS_OUTPUT_CONTAINER_DIR = "/metrics_output"
+
+
+def metrics_output_bind(metrics_output_dir, output_dir) -> list:
+    """Bind entry that mounts the metrics step's separate output root, or ``[]`` when there is none.
+
+    Without this entry the folder does not exist inside the container and the metrics job fails on its first
+    ``mkdir`` ("Read-only file system"). No entry is needed when the metrics step writes below ``output_dir``,
+    which is already mounted at ``/output``. The host folder is created if missing, because a bind source must exist.
+    """
+    from pathlib import Path
+
+    if not metrics_output_dir:
+        return []
+    host = Path(metrics_output_dir).absolute()
+    if host == Path(output_dir).absolute():
+        return []
+    host.mkdir(parents=True, exist_ok=True)
+    return [f"{host}:{METRICS_OUTPUT_CONTAINER_DIR}"]
