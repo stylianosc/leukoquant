@@ -5,7 +5,7 @@ title: "LeukoQuant: Lesion-Informed White Matter Damage Metrics Toolkit for Cere
 version: 2.1.1
 date-released: 2026-10-28
 license: Apache-2.0
-doi: 10.5281/zenodo.23562104
+doi: 10.5281/zenodo.23748870
 repository-code: "https://github.com/stylianosc/leukoquant"
 url: "https://stylianosc.github.io/leukoquant/"
 authors:
