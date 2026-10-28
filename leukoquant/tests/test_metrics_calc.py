@@ -6,7 +6,6 @@ from leukoquant.utils.metrics_calc import (
     _compute_load,
     _compute_tiv_from_array,
     _compute_whole_brain_lesion_microstructure_metrics_fast as _compute_whole_brain_lesion_microstructure_metrics,
-    DISTANCE_CAP_MM,
     _distance_to_lesion,
     _summary_nonzero,
     _auc,
@@ -558,9 +557,9 @@ class TestTissueAroundLesions:
             lesion_arrays={"wmh": lesion}, binary_lesion_arrays={"wmh": binary}, dilated_lesion_arrays={"wmh": dilated},
             penumbras_arrays={"wmh": penumbra}, map_arrays={"fa": fa}, voxel_vol=1.0, voxel_sizes=(1.0, 1.0, 1.0)), dist
 
-    def test_distance_cap_and_lesion_free_subject(self):
+    def test_lesion_free_subject_is_infinitely_far(self):
         d = _distance_to_lesion(np.zeros((5, 5, 5)), (1.0, 1.0, 1.0))
-        assert np.all(d == DISTANCE_CAP_MM)             # not the meaningless distance to the array border
+        assert np.all(np.isinf(d))                      # not the meaningless distance to the array border
 
     def test_rings_and_nawm_see_the_graded_change(self):
         from leukoquant.utils.metrics_calc import _compute_tract_level_metrics_fast
@@ -606,7 +605,9 @@ class TestTissueAroundLesions:
         assert row["fa_wmh_map_tract_binary_nawm_n_voxels"] == row["tract_volume_mm3"]
         assert row["fa_wmh_map_tract_binary_penumbra_n_voxels"] == 0.0
         assert row["fa_wmh_map_tract_binary_penumbra_3_6_n_voxels"] == 0.0
-        assert row["wmh_tract_nearest_lesion_distance"] == DISTANCE_CAP_MM
+        assert np.isnan(row["wmh_tract_nearest_lesion_distance"])              # no lesion: no distance, not a made-up number
+        assert np.isnan(row["wmh_tract_mean_lesion_distance"])
+        assert row["wmh_tract_fraction_within_5mm_of_lesion"] == 0.0
 
 
 class TestTractLesionDistance:

@@ -7,6 +7,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.1] - 2026-10-28
+
+### Changed
+- Tract-to-lesion distance of a subject without any lesion: the nearest and the mean distance are now NaN (2.1.0 reported the 100 mm cap, which clipped every distance at 100 mm). The fraction within 5 mm stays 0, and the NAWM and the outer penumbra rings of a lesion-free subject are unchanged (the whole tract and empty). No distance was clipped and no participant was lesion-free in the three clinical cohorts of the paper, so none of its values change.
+
+---
+
 ## [2.1.0] - 2026-10-22
 
 ### Changed (metric values and columns differ from 2.0.0)

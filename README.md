@@ -159,7 +159,7 @@ If you use LeukoQuant in your research, please cite (also available as [CITATION
   author    = {Charalampous, Stylianos and Barkhof, Frederik and Cardoso, M. Jorge and Sudre, Carole},
   title     = {{LeukoQuant}: Lesion-Informed White Matter Damage Metrics Toolkit for Cerebral Small Vessel Disease},
   year      = {2026},
-  version   = {2.1.0},
+  version   = {2.1.1},
   url       = {https://github.com/stylianosc/leukoquant},
   doi       = {10.5281/zenodo.23562104},
   license   = {Apache-2.0}

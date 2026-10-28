@@ -599,21 +599,20 @@ STRUCTURE_26 = np.ones((3, 3, 3), dtype=bool)
 PENUMBRA_RINGS_MM = ((0.0, 3.0), (3.0, 6.0), (6.0, 9.0))
 RING_SUFFIXES = ("penumbra", "penumbra_3_6", "penumbra_6_9")
 DILATION_MM = PENUMBRA_RINGS_MM[0][1]
-# Distance to the nearest lesion is capped (and is this value when a subject has no lesion at all).
-DISTANCE_CAP_MM = 100.0
 
 
 def _distance_to_lesion(lesion_mask: np.ndarray, voxel_sizes) -> np.ndarray:
-    """Euclidean distance (mm, float32) from every voxel to the nearest lesion voxel, capped at DISTANCE_CAP_MM.
+    """Euclidean distance (mm, float32) from every voxel to the nearest lesion voxel.
 
     scipy's distance transform of an array without any lesion voxel returns distances to the array border, which are
-    meaningless here; a subject without a lesion therefore gets DISTANCE_CAP_MM everywhere.
+    meaningless here; a subject without a lesion therefore gets an infinite distance everywhere, so that "farther than
+    X mm from a lesion" (the NAWM and the outer rings) is the whole tissue. The tract-level distances report such a
+    subject as missing (NaN), see _fast_tract_distance_metrics.
     """
     mask = np.asarray(lesion_mask) != 0
     if not mask.any():
-        return np.full(mask.shape, DISTANCE_CAP_MM, dtype=np.float32)
-    dist = ndimage.distance_transform_edt(~mask, sampling=voxel_sizes)
-    return np.minimum(dist, DISTANCE_CAP_MM).astype(np.float32)
+        return np.full(mask.shape, np.inf, dtype=np.float32)
+    return ndimage.distance_transform_edt(~mask, sampling=voxel_sizes).astype(np.float32)
 
 
 def _summary_reduced(values: np.ndarray) -> Dict[str, float]:
@@ -664,7 +663,7 @@ class _LesionContext:
         self._dist = None if distance is None else _flat(np.asarray(distance, dtype=np.float32))
 
     def distance_flat(self, voxel_sizes):
-        """Distance (mm, capped; see _distance_to_lesion) to the nearest lesion voxel, once per lesion set."""
+        """Distance (mm; infinite without any lesion, see _distance_to_lesion) to the nearest lesion voxel, once per lesion set."""
         if self._dist is None:
             self._dist = _flat(_distance_to_lesion(self.lm.reshape(self.shape), voxel_sizes))
         return self._dist
@@ -804,7 +803,7 @@ FRACTION_WITHIN_MM = 5.0
 
 
 def _fast_tract_distance_metrics(lc: _LesionContext, tc: _TractContext, voxel_sizes):
-    """How close the tract is to the lesions (mm; capped at DISTANCE_CAP_MM, which is also the value without any lesion).
+    """How close the tract is to the lesions (mm; NaN when there is no lesion to be close to).
 
     tract_nearest_lesion_distance            smallest distance of any tract voxel to a lesion (0 if the tract contains lesion)
     tract_mean_lesion_distance               mean over the tract's voxels of the distance to the nearest lesion
@@ -812,19 +811,20 @@ def _fast_tract_distance_metrics(lc: _LesionContext, tc: _TractContext, voxel_si
 
     The distance transform depends only on the lesion mask, so it is computed once per lesion set (lc.distance_flat).
     These replace the distance of the tract's centre of mass, which for a curved tract can lie outside the tract.
-    A tract without voxels has no distance: the cap, and a fraction of 0.
+    A subject without any lesion, or a tract without voxels, has no distance (NaN, not a made-up number) and a
+    fraction of 0, since no voxel lies near a lesion.
     """
+    fraction_key = f"tract_fraction_within_{int(FRACTION_WITHIN_MM)}mm_of_lesion"
     if len(tc.idx_bin) == 0:
-        return {
-            "tract_nearest_lesion_distance": DISTANCE_CAP_MM,
-            "tract_mean_lesion_distance": DISTANCE_CAP_MM,
-            f"tract_fraction_within_{int(FRACTION_WITHIN_MM)}mm_of_lesion": 0.0,
-        }
+        return {"tract_nearest_lesion_distance": np.nan, "tract_mean_lesion_distance": np.nan, fraction_key: 0.0}
     d = lc.distance_flat(voxel_sizes)[tc.idx_bin].astype(np.float64)
+    nearest = float(d.min())
+    if not np.isfinite(nearest):                       # no lesion in the subject: the distance map is infinite
+        return {"tract_nearest_lesion_distance": np.nan, "tract_mean_lesion_distance": np.nan, fraction_key: 0.0}
     return {
-        "tract_nearest_lesion_distance": float(d.min()),
+        "tract_nearest_lesion_distance": nearest,
         "tract_mean_lesion_distance": float(d.mean()),
-        f"tract_fraction_within_{int(FRACTION_WITHIN_MM)}mm_of_lesion": float(np.mean(d <= FRACTION_WITHIN_MM)),
+        fraction_key: float(np.mean(d <= FRACTION_WITHIN_MM)),
     }
 
 
