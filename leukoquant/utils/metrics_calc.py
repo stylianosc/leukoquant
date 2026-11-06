@@ -1217,6 +1217,17 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
                 "If you intended to combine them, provide a single pre-merged file.",
                 lesion_name, len(lesion_arrs), lesion_files[0],
             )
+        # BaMoS lesion maps are weights in [0, 1]. A larger maximum means the map carries a NIfTI intensity
+        # scaling (the input scan's scl_slope copied by older BaMoS builds): the binary lesion metrics are
+        # unaffected, but every lesion-weighted ("*_lesion_pd_*") metric is multiplied by that factor.
+        lesion_max = float(lesion_arrs[0].max()) if lesion_arrs[0].size else 0.0
+        if lesion_max > 1.0 + 1e-3:
+            logger.warning(
+                "Lesion '%s' (%s) has values up to %.4g, above the expected [0, 1]: the lesion-weighted "
+                "('lesion_pd') metrics of this subject are scaled by that factor; regenerate CorrectLesion.nii.gz "
+                "with the fixed correction script and rerun the metrics.",
+                lesion_name, lesion_files[0], lesion_max,
+            )
         lesion_array = np.where(lesion_arrs[0] < 0.5, 0, lesion_arrs[0])
         binary_array = np.where(lesion_array < 0.5, 0, 1).astype(np.uint8)
 

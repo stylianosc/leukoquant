@@ -220,7 +220,20 @@ def main(argv):
 
 
     lesion_nii = nib.load(args.lesion)
-    lesion_data  = lesion_nii.get_fdata()
+    # Read the stored voxel values WITHOUT applying the NIfTI scl_slope/scl_inter.
+    # BaMoS lesion maps hold weights in [0, 1], but BaMoS builds up to this release copied the
+    # input scan's slope into the lesion map header; get_fdata() applies that slope and, because
+    # the result is saved below with a fresh header, would bake the wrong scaling permanently into
+    # CorrectLesion.nii.gz (EPAD maps came out as 2.94-5.87 instead of 0.5-1).
+    # nibabel moves the header scaling onto the array proxy (the header's own slope reads as None).
+    slope, inter = lesion_nii.dataobj.slope, lesion_nii.dataobj.inter
+    if (slope not in (None, 1.0)) or (inter not in (None, 0.0)):
+        print('WARNING: lesion header has scl_slope=%s scl_inter=%s; ignoring it and using the '
+              'raw stored values' % (slope, inter))
+    lesion_data = np.asanyarray(lesion_nii.dataobj.get_unscaled()).astype(np.float32)
+    if np.max(lesion_data) > 1.0 + 1e-3:
+        print('WARNING: raw lesion values exceed 1 (max %s); the lesion weights are expected in '
+              '[0, 1], so this map has a problem that is not the header scaling' % np.max(lesion_data))
     print('Lesion range before corr ',np.min(lesion_data), np.max(lesion_data))
     path_results = os.path.split(args.lesion)[0]
     connect_nii = None

@@ -78,6 +78,7 @@ CONTAINER_SIF  = os.path.join(
 
 sys.path.insert(0, LEUKOQUANT_PARENT_DIR)
 from leukoquant.utils.container_utils import ensure_container
+from leukoquant.utils.mem_override import tracula_mem_mb
 ensure_container(CONTAINER_SIF)
 
 # ── recon-all module (activated only when at least one subject needs it) ──────
@@ -299,8 +300,10 @@ for _parc in PARCELLATIONS:
             # for -path, 0.3 GB for bedpostx), including sessions that needed the
             # tract-recovery retry. 8 GB keeps about 4x headroom, since SGE limits
             # virtual memory and other datasets may differ. Raise it if a session
-            # is killed for memory (each stage logs "[mem] Peak RSS (...)").
-            mem_mb=8*1024,
+            # is killed for memory (each stage logs "[mem] Peak RSS (...)"): set
+            # LEUKOQUANT_TRACULA_MEM_GB (4-64) for that run, e.g. 16 for ADNI-3 sessions
+            # that peaked at 4.7-8.1 GB and were killed; unset keeps 8 GB.
+            mem_mb=tracula_mem_mb(),
             time="168:00:00",
             scratch_size=3*1024,
             name=f"tracula_{_parc}",

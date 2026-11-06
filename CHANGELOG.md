@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.2] - 2026-11-06
+
+### Added
+- `LEUKOQUANT_TRACULA_MEM_GB` (whole GB, 4-64) sets the memory request of the TRACULA jobs for one run; unset or empty keeps the
+  8 GB default, an invalid value is ignored with a printed warning. ADNI-3 sessions peaked at 4.7-8.1 GB and several were
+  killed at the 8 GB limit (`utils/mem_override.py`, tests in `tests/test_mem_override.py`).
+
+### Fixed
+- BaMoS lesion maps no longer carry the input scan's NIfTI `scl_slope`/`scl_inter`. BaMoS never applies that slope to the voxels but copied it into every image it wrote, so a lesion map holding weights in [0, 1] read back multiplied by the slope of the scan it came from (EPAD `CorrectLesion.nii.gz` came out as 2.94-5.87 instead of 0.5-1). `correction_lesions_111125.py` made it permanent: `get_fdata()` applied the slope and the result was saved with a fresh header. The BaMoS header copy (`nifti_copy_nim_info`, `CreateNiiFromArray`) now resets the scaling, and the correction script reads the stored values (`dataobj.get_unscaled()`). Binary lesion metrics (volumes, counts, overlaps) are unchanged; the lesion-weighted `*lesion_pd*` metrics of an affected subject were multiplied by its slope and need `CorrectLesion.nii.gz` regenerated and the metrics rerun. `metrics_calc.py` now warns when a lesion map exceeds 1.
+
 ## [2.1.1] - 2026-10-28
 
 ### Changed

@@ -1916,6 +1916,12 @@ template <typename T> nifti_image * CreateNiiFromArray(T * ArrayForNii, nifti_im
         return NULL;
     }
     nifti_image * BuiltNii=nifti_copy_nim_info(BasicFloatImage);
+    // nifti_copy_nim_info copies the whole header, including the intensity scaling of
+    // the template image. The array written below is raw float data, so a template
+    // slope/intercept (e.g. from an integer-stored input scan) would make readers rescale
+    // the values (lesion maps expected in [0,1] came out multiplied by the slope).
+    BuiltNii->scl_slope=1;
+    BuiltNii->scl_inter=0;
     BuiltNii->dim[0]=numbmodal>1?4:3;
     BuiltNii->dim[4]=numbmodal;
     BuiltNii->dim[5]=1;

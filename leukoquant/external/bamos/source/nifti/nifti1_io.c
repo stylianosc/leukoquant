@@ -5550,6 +5550,15 @@ nifti_image * nifti_copy_nim_info(const nifti_image * src)
 
   dest->data = NULL;
 
+  /* BaMoS/NiftySeg read voxel values as stored, i.e. they never apply the source
+     image's scl_slope/scl_inter, and every image they build from a copied header
+     holds computed values (lesion weights, probabilities, labels, ...). Carrying the
+     source slope/intercept over would make any NIfTI reader rescale those values
+     (a lesion map in [0,1] read back multiplied by the input scan's slope), so the
+     copy always declares "stored values are the real values". */
+  dest->scl_slope = 1.0f;
+  dest->scl_inter = 0.0f;
+
   return dest;
 }
 
