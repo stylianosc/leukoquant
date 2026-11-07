@@ -689,6 +689,9 @@ prepare_t1_inputs() {
     # Collapse target T1 to single volume if 4D (no-op if already 3D)
     TARGET_T1_3D="$T1_PREP_DIR/target_t1_singleframe.nii.gz"
     python3 "$IMAGE_UTILS_SCRIPT" --input "$TARGET_T1" --output "$TARGET_T1_3D" --op first_frame
+    # Same grid as the BaMoS/GIF outputs (first frame reoriented to RAS+): the z-score maps are written on the
+    # target T1's grid, and the metrics stage pairs them voxel by voxel with the lesion map.
+    python3 "$IMAGE_UTILS_SCRIPT" --input "$TARGET_T1_3D" --output "$TARGET_T1_3D" --op canonical
     TARGET_T1="$TARGET_T1_3D"
 
     if [[ "$SKIP_SKULLSTRIP_T1" -eq 1 ]]; then

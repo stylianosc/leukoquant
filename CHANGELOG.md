@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.4] - 2026-11-07
+
+### Fixed
+- The z-score stage now reorients its target T1 to RAS+ (after the first frame) as 2.1.3 did for the metrics stage: z-score maps are written on the target T1's grid, so for a T1 stored in another orientation they stayed on a grid the lesion map and the metrics-stage maps no longer shared.
+
+### Changed
+- `metrics_calc.py` now checks that the lesion maps, maps, tract atlas, tract files and skeleton sit on the reference T1's voxel grid by shape AND affine (`_assert_same_voxel_grid`), before any loading. The previous shape-only check could not see two grids that differ by an axis flip (a T1 stored LAS against a lesion map in RAS has the same shape), so such inputs were paired voxel by voxel with the left and right sides swapped. The run now stops with the offending inputs listed.
+
+---
+
 ## [2.1.3] - 2026-11-07
 
 ### Fixed

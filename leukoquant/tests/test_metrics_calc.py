@@ -752,3 +752,54 @@ class TestSkeletonIsBinary:
         sk = np.zeros((10, 10, 10)); sk[5, 5, :] = 1.0; sk[5, 6, :] = 0.2    # blur next to the line
         out = _skeleton_metrics_fast("s", {"md": md}, sk).iloc[0]
         assert out["skeleton_n_voxels"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Voxel grid check (shape AND affine)
+# ---------------------------------------------------------------------------
+
+def _save_vol(path, shape, affine):
+    import nibabel as nib
+    nib.save(nib.Nifti1Image(np.zeros(shape, dtype=np.float32), affine), str(path))
+    return str(path)
+
+
+def test_assert_same_voxel_grid_accepts_identical_grids(tmp_path):
+    import nibabel as nib
+    from leukoquant.utils.metrics_calc import _assert_same_voxel_grid
+    ref = nib.load(_save_vol(tmp_path / "ref.nii.gz", (5, 6, 7), np.diag([1.0, 1.0, 1.0, 1.0])))
+    other = _save_vol(tmp_path / "lesion.nii.gz", (5, 6, 7), np.diag([1.0, 1.0, 1.0, 1.0]))
+    _assert_same_voxel_grid(ref, {"lesion 'wmh'": other})
+
+
+def test_assert_same_voxel_grid_rejects_a_flipped_grid_of_the_same_shape(tmp_path):
+    """A T1 stored LAS against a lesion map in RAS has the same shape: only the affine tells them apart."""
+    import nibabel as nib
+    from leukoquant.utils.metrics_calc import _assert_same_voxel_grid
+    las = np.diag([-1.0, 1.0, 1.0, 1.0])
+    ras = np.diag([1.0, 1.0, 1.0, 1.0])
+    ref = nib.load(_save_vol(tmp_path / "ref.nii.gz", (5, 6, 7), las))
+    lesion = _save_vol(tmp_path / "lesion.nii.gz", (5, 6, 7), ras)
+    with pytest.raises(ValueError, match="orientation"):
+        _assert_same_voxel_grid(ref, {"lesion 'wmh'": lesion})
+
+
+def test_assert_same_voxel_grid_rejects_a_different_shape(tmp_path):
+    import nibabel as nib
+    from leukoquant.utils.metrics_calc import _assert_same_voxel_grid
+    aff = np.eye(4)
+    ref = nib.load(_save_vol(tmp_path / "ref.nii.gz", (5, 6, 7), aff))
+    other = _save_vol(tmp_path / "map.nii.gz", (7, 6, 5), aff)
+    with pytest.raises(ValueError, match="shape"):
+        _assert_same_voxel_grid(ref, {"map 'dti_fa'": other})
+
+
+def test_assert_same_voxel_grid_ignores_float_rounding_of_the_affine(tmp_path):
+    import nibabel as nib
+    from leukoquant.utils.metrics_calc import _assert_same_voxel_grid
+    aff = np.eye(4)
+    ref = nib.load(_save_vol(tmp_path / "ref.nii.gz", (5, 6, 7), aff))
+    jittered = aff.copy()
+    jittered[:3, 3] += 1e-4
+    other = _save_vol(tmp_path / "map.nii.gz", (5, 6, 7), jittered)
+    _assert_same_voxel_grid(ref, {"map 'dti_fa'": other})

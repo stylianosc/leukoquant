@@ -240,6 +240,31 @@ def _voxel_vol_mm3(img: Any) -> float:
     """Return voxel volume in mm³ from a nibabel image."""
     return float(np.prod([float(z) for z in img.header.get_zooms()[:3]]))
 
+def _assert_same_voxel_grid(ref_img: Any, files: Dict[str, str], atol_mm: float = 1e-2) -> None:
+    """Raise ValueError unless every file sits on the reference T1's voxel grid (shape AND affine).
+
+    The metrics pair voxels of the lesion map, the maps, the tracts and the skeleton by array index, so
+    they must share one voxel grid. A comparison of array shapes alone cannot see two grids that differ
+    by an axis flip (e.g. a T1 stored LAS against a lesion map in RAS: same shape, left and right swapped),
+    which would silently pair mirrored voxels. The affine settles it; ``atol_mm`` is far below a voxel
+    but above float rounding of the stored affines. Only headers are read.
+    """
+    ref_affine = np.asarray(ref_img.affine, dtype=float)
+    ref_shape = tuple(ref_img.shape[:3])
+    mismatches: List[str] = []
+    for label, path in files.items():
+        img = _load(path)
+        if tuple(img.shape[:3]) != ref_shape:
+            mismatches.append(f"{label}: shape {tuple(img.shape[:3])} != reference {ref_shape} ({path})")
+        elif not np.allclose(np.asarray(img.affine, dtype=float), ref_affine, rtol=0.0, atol=atol_mm):
+            mismatches.append(
+                f"{label}: same shape but a different orientation/position "
+                f"({''.join(nib.aff2axcodes(img.affine))} vs reference {''.join(nib.aff2axcodes(ref_affine))}) ({path})"
+            )
+    if mismatches:
+        raise ValueError("Voxel grid mismatch against the reference T1:\n" + "\n".join(mismatches))
+
+
 def _assert_shape_compatibility(
     reference_shape: Tuple[int, ...],
     arrays: Dict[str, np.ndarray],
@@ -1174,6 +1199,18 @@ def _load_inputs(args: argparse.Namespace) -> InputBundle:
     # Validate reference T1 is readable.
     ref_img = _load(t1_files[0])
     logger.info("Reference T1 shape: %s  zooms: %s", ref_img.shape, ref_img.header.get_zooms()[:3])
+
+    # Every NIfTI input must sit on the reference T1's voxel grid (shape and affine), not just have its shape.
+    grid_inputs: Dict[str, str] = {}
+    for _name, _files in lesion_dict.items():
+        grid_inputs.update({f"lesion '{_name}'": f for f in _files[:1]})
+    for _name, _files in map_file_groups.items():
+        grid_inputs.update({f"map '{_name}'": f for f in _files[:1]})
+    for _name, _file in tract_atlas_files_dict.items():
+        grid_inputs[f"tract atlas '{_name}'"] = _file
+    grid_inputs.update({"skeleton": f for f in skeleton_files[:1]})
+    grid_inputs.update({f"tract file {Path(f).parent.name}/{Path(f).name}": f for f in tract_files})
+    _assert_same_voxel_grid(ref_img, {k: v for k, v in grid_inputs.items() if v.endswith((".nii", ".nii.gz"))})
 
     ventricle_array: Optional[np.ndarray] = None
     if getattr(args, "parcellation_path", None) and getattr(args, "ventricle_labels", None):
