@@ -15,8 +15,8 @@ import numpy as np
 logger = logging.getLogger(__name__)
 
 
-def reorient_to_ras(input_path: str, output_path: str) -> None:
-    """Reorient a NIfTI image to RAS+ and clip negative voxels to 0.
+def reorient_to_ras(input_path: str, output_path: str, clip_negatives: bool = True) -> None:
+    """Reorient a NIfTI image to RAS+ and (by default) clip negative voxels to 0.
 
     Uses nibabel.as_closest_canonical(), which flips/swaps data axes to reach
     the nearest RAS-aligned orientation without resampling or interpolation.
@@ -34,6 +34,10 @@ def reorient_to_ras(input_path: str, output_path: str) -> None:
     Args:
         input_path:  Path to the source NIfTI file (.nii or .nii.gz).
         output_path: Destination path for the reoriented, clipped image.
+        clip_negatives: Clip negative voxels to 0 (default). Pass False to only
+            reorient, leaving every voxel value untouched (used by the metrics
+            stage, which must land on the same grid as the BaMoS/GIF outputs
+            without altering the T1 intensities it was previously given).
     """
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
 
@@ -42,8 +46,9 @@ def reorient_to_ras(input_path: str, output_path: str) -> None:
     needs_reorient = axcodes != ("R", "A", "S")
 
     img_ras = nib.as_closest_canonical(img) if needs_reorient else img
-    data = np.asarray(img_ras.dataobj)
-    has_negatives = bool(np.any(data < 0))
+    # The voxel data is only read when negatives have to be looked for; a pure reorientation never needs it.
+    data = np.asarray(img_ras.dataobj) if clip_negatives else None
+    has_negatives = clip_negatives and bool(np.any(data < 0))
 
     is_same = Path(input_path).resolve() == Path(output_path).resolve()
 
@@ -140,7 +145,7 @@ def main(argv=None) -> None:
     p.add_argument("--output",  required=True, help="Output NIfTI path")
     p.add_argument(
         "--op",
-        choices=["reorient", "first_frame"],
+        choices=["reorient", "canonical", "first_frame"],
         default="reorient",
         help="Operation to perform (default: reorient)",
     )
@@ -155,6 +160,8 @@ def main(argv=None) -> None:
 
     if args.op == "first_frame":
         select_first_frame(args.input, args.output)
+    elif args.op == "canonical":
+        reorient_to_ras(args.input, args.output, clip_negatives=False)
     else:
         reorient_to_ras(args.input, args.output)
 

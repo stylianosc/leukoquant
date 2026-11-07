@@ -383,6 +383,10 @@ if [ -n "$T1_PATH" ] && [ "$T1_PATH" != "None" ]; then
         echo "✓ Found T1 file (direct) [space=${T1_SPACE}]: $T1_FILE"
         T1_SINGLEFRAME="$SCRATCH_DIR/t1_singleframe.nii.gz"
         python3 "$SCRIPT_DIR/image_utils.py" --input "$T1_FILE" --output "$T1_SINGLEFRAME" --op first_frame
+        # Same grid as the BaMoS/GIF outputs (lesion map, parcellation), which are produced from the
+        # first frame reoriented to RAS+. A raw T1 stored in another orientation otherwise ends up on a
+        # different voxel grid from the lesion map and the metrics stage fails its shape check.
+        python3 "$SCRIPT_DIR/image_utils.py" --input "$T1_SINGLEFRAME" --output "$T1_SINGLEFRAME" --op canonical
         T1_FILE="$T1_SINGLEFRAME"
         echo -e "t1\tmain\t${T1_SPACE}\t${T1_FILE}" >> "$INPUT_MANIFEST"
     elif [ -d "$T1_BASE" ]; then
@@ -399,6 +403,8 @@ if [ -n "$T1_PATH" ] && [ "$T1_PATH" != "None" ]; then
                 _base_name=$(basename "$_f")
                 _t1_single="$SCRATCH_DIR/t1_singleframe_${_idx}_${_base_name}"
                 python3 "$SCRIPT_DIR/image_utils.py" --input "$_f" --output "$_t1_single" --op first_frame
+                # Same grid as the BaMoS/GIF outputs: first frame reoriented to RAS+ (see the direct-file branch).
+                python3 "$SCRIPT_DIR/image_utils.py" --input "$_t1_single" --output "$_t1_single" --op canonical
                 echo -e "t1\tmain\t${T1_SPACE}\t${_t1_single}" >> "$INPUT_MANIFEST"
                 if [ "$_idx" -eq 0 ]; then
                     T1_FILE="$_t1_single"

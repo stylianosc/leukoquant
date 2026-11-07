@@ -7,6 +7,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.1.3] - 2026-11-07
+
+### Fixed
+- The metrics stage now reorients the reference T1 to RAS+ (after taking its first frame), as BaMoS and GIF already do. A raw T1 stored in another orientation (the EPAD sessions exported as a 4D P,S,R image) was left on its own voxel grid, so the lesion map, parcellation and DWI-space maps no longer matched it and `metrics_calc.py` stopped on its shape check. `image_utils.py` gains `--op canonical` (reorient only, voxel values untouched, so T1s that are already RAS+ are copied byte for byte); `reorient_to_ras` takes `clip_negatives` (default unchanged).
+
+---
+
 ## [2.1.2] - 2026-11-06
 
 ### Added
