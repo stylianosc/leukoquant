@@ -266,10 +266,12 @@ def _metrics_spec_str(subject):
     # them existing only as an (until now unused) DAG dependency edge.
     # metrics_calc.sh's --metrics parser requires "base:glob:space" per entry
     # (see parse_spec in metrics_calc.sh) -- a bare file path has no glob, so
-    # it was silently dropped with a "no glob pattern" warning. z-score maps
-    # are registered to T1 space (confirmed via freeview: same shape/affine
-    # as native T1), so space="t1" here, matching how T1/lesion entries skip
-    # the DWI->T1 registration step.
+    # it was silently dropped with a "no glob pattern" warning. Since 2.2.0 the
+    # z-score maps are written in DWI space (z-score output_space default), so
+    # they carry the "dwi" tag and metrics_calc.sh projects them to T1 with the
+    # same DWI->T1 transform as the raw dti/noddi maps. Maps from earlier
+    # releases are on the T1 grid; metrics_calc.sh detects that and copies them.
+    # cfg["z_score_space"] follows the z-score output_space ("dwi" or "t1").
     for z_path in (_z_score_map.get(subject) or []):
         map_name = Path(z_path).name
         for ext in (".nii.gz", ".nii"):
@@ -278,7 +280,7 @@ def _metrics_spec_str(subject):
                 break
         z_resolved = Path(z_path).resolve()
         sif_z_dir = translate_path(str(z_resolved.parent), BIND_MAP)
-        sif_metrics[map_name] = f"{sif_z_dir}:{z_resolved.name}:t1"
+        sif_metrics[map_name] = f"{sif_z_dir}:{z_resolved.name}:{_z_score_space}"
     return ",".join([f"{k}={v}" for k, v in sif_metrics.items()])
 
 # ============================================================================
@@ -304,6 +306,7 @@ _parcellation_map = cfg.get("parcellation_map", {})
 _ventricle_labels = cfg.get("ventricle_labels", {})
 _tract_qc_map  = cfg.get("tract_qc_report_map", {})  # {subject: {parcellation: path}}
 _z_score_map   = cfg.get("z_score_map", {})          # {subject: [paths]}
+_z_score_space = cfg.get("z_score_space", "dwi")     # space the z-score maps are written in
 
 wildcard_constraints:
     subject="|".join(re.escape(s) for s in SUBJECTS),

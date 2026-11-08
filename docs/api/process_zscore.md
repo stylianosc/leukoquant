@@ -40,8 +40,8 @@ Outputs are written to `{output_dir}/{subject}/z_scores/outputs/`.
 | `--demographics-csv` | - | `path` | `None` | No | CSV file with per-subject demographics for the GLM |
 | `--covariates` | - | `str` | `None` | No | Comma-separated covariate column names from `--demographics-csv` (e.g. `age,sex`) |
 | `--poly-terms` | - | `str` | `None` | No | Comma-separated polynomial expansion terms (e.g. `age:2` for quadratic age) |
-| `--metric-space` | - | `choice` | `t1` | No | Space in which the input metric maps are defined: `t1` or `dwi` |
-| `--output-space` | - | `choice` | `t1` | No | Space in which Z-score outputs are computed: `t1` or `dwi` |
+| `--metric-space` | - | `choice` | `dwi` | No | Space in which the input metric maps are defined: `t1` or `dwi` |
+| `--output-space` | - | `choice` | `metric space` | No | Space in which Z-score outputs are computed: `t1` or `dwi` |
 | `--dwi-pattern` | - | `str` | `None` | No | DWI image pattern. Required when `--metric-space=dwi` or `--output-space=dwi`. |
 | `--bval-pattern` | - | `str` | `None` | No | bval file pattern (optional, for DWI skull-stripping) |
 | `--skip-skullstrip-t1` | - | flag | `False` | No | Skip skull stripping for T1 images |

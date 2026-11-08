@@ -7,6 +7,16 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.2.0] - 2026-11-07
+
+### Changed
+- Z-score maps are now written in DWI space by default (`output_space` of the z-score stage in `process-all`, previously T1). The metrics stage tags them `dwi` and projects them to the T1 grid with the same DWI-to-T1 transform and linear interpolation as the raw dti / noddi maps, so every map is resampled in one place. The standalone `process-zscore` command follows: `--metric-space` defaults to `dwi` and `--output-space` defaults to the metric space, so nothing is registered unless requested (the maps are DWI maps and stay in their native space); `--dwi-pattern` is therefore required unless the spaces are set to `t1` explicitly. Z-score maps from earlier releases (on the T1 grid) keep working in the metrics stage: see the next entry.
+
+### Added
+- `image_utils.py --op same_grid --ref REF` (exit status 0 when the image shares REF's voxel grid by shape and affine) and `same_voxel_grid()`. `metrics_calc.sh` uses it so that an input tagged `dwi` that already sits on the T1 grid is copied instead of being sent through the DWI-to-T1 transform.
+
+---
+
 ## [2.1.4] - 2026-11-07
 
 ### Fixed

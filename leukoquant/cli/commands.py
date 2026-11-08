@@ -438,8 +438,8 @@ def process_zscore(healthy_subjects_list: Optional[str],
                    demographics_csv: Optional[str],
                    covariates: Optional[str] = None,
                    polynomial_terms: Optional[str] = None,
-                   metric_space: str = 't1',
-                   output_space: str = 't1',
+                   metric_space: str = 'dwi',
+                   output_space: Optional[str] = None,
                    dwi_pattern: Optional[str] = None,
                    bval_pattern: Optional[str] = None,
                    skip_skullstrip_t1: bool = False,
@@ -462,8 +462,8 @@ def process_zscore(healthy_subjects_list: Optional[str],
         demographics_csv: CSV file with demographics used by GLM
         covariates: optional comma-separated covariates
         polynomial_terms: optional comma-separated polynomial terms with power notation (default power is 2, e.g., "age,age:2,bmi^3")
-        metric_space: 't1' or 'dwi' (default: 't1')
-        output_space: 't1' or 'dwi' (default: 't1')
+        metric_space: 't1' or 'dwi' (default: 'dwi')
+        output_space: 't1' or 'dwi' (default: the metric_space)
         dwi_pattern: pattern to locate subject DWIs (use {subject}), required if metric_space='dwi'
         bval_pattern: pattern to locate bval files (use {subject}), optional
         skip_skullstrip_t1: if True, skip T1 skull stripping
@@ -487,7 +487,7 @@ def process_zscore(healthy_subjects_list: Optional[str],
             print(f"T1 pattern: {t1_pattern}")
             print(f"Metrics: {metrics}")
             print(f"Metric space: {metric_space}")
-            print(f"Output space: {output_space}")
+            print(f"Output space: {output_space or metric_space}")
             print(f"DWI pattern: {dwi_pattern}")
             print(f"Skip T1 skullstrip: {skip_skullstrip_t1}")
             print(f"Skip DWI skullstrip: {skip_skullstrip_dwi}")

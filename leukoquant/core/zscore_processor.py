@@ -328,8 +328,8 @@ class ZScoreProcessor:
                    target_subjects_list: Optional[str] = None,
                    covariates: Optional[List[str]] = None,
                    polynomial_terms: Optional[List[str]] = None,
-                   metric_space: str = 't1',
-                   output_space: str = 't1',
+                   metric_space: str = 'dwi',
+                   output_space: Optional[str] = None,
                    dwi_pattern: Optional[str] = None,
                    bval_pattern: Optional[str] = None,
                    skip_skullstrip_t1: bool = False,
@@ -354,8 +354,8 @@ class ZScoreProcessor:
             demographics_csv:      CSV file with demographics for GLM
             covariates:            list of covariate column names (optional)
             polynomial_terms:      list of polynomial terms with optional power notation (default power is 2, e.g., ["age", "age:2", "bmi^3"], optional)
-            metric_space:          't1' or 'dwi' (default: 't1')
-            output_space:          't1' or 'dwi' (default: 't1')
+            metric_space:          't1' or 'dwi' (default: 'dwi')
+            output_space:          't1' or 'dwi' (default: the metric_space, i.e. no registration unless requested)
             dwi_pattern:           {subject} pattern to locate DWI images (required if metric_space='dwi' or output_space='dwi')
             bval_pattern:          {subject} pattern to locate bval files (optional)
             skip_skullstrip_t1:    skip skull stripping for target/healthy T1s
@@ -421,6 +421,9 @@ class ZScoreProcessor:
         for metric_name, metric_pattern in metrics.items():
             _validate_glob_matches(metric_pattern, all_subjects, f"metric '{metric_name}'")
         
+        # The output stays in the metric space unless a different one is requested.
+        output_space = output_space or metric_space
+
         # Validate DWI patterns if DWI inputs are required
         if metric_space == 'dwi' or output_space == 'dwi':
             if not dwi_pattern:
@@ -576,8 +579,8 @@ def apply_zscore(
     demographics_csv: Optional[str] = None,
     covariates: Optional[str] = None,
     polynomial_terms: Optional[str] = None,
-    metric_space: str = 't1',
-    output_space: str = 't1',
+    metric_space: str = 'dwi',
+    output_space: Optional[str] = None,
     dwi_pattern: Optional[str] = None,
     bval_pattern: Optional[str] = None,
     skip_skullstrip_t1: bool = False,
@@ -616,8 +619,8 @@ def apply_zscore(
                                    yaml_cfg.get("dwi_path"))
     bval_pattern_raw      = first_truthy(bval_pattern,     yaml_cfg.get("bval_pattern"),
                                    yaml_cfg.get("bval_path"))
-    metric_space          = first_truthy(metric_space,     yaml_cfg.get("metric_space")) or 't1'
-    output_space          = first_truthy(output_space,     yaml_cfg.get("output_space")) or 't1'
+    metric_space          = first_truthy(metric_space,     yaml_cfg.get("metric_space")) or 'dwi'
+    output_space          = first_truthy(output_space,     yaml_cfg.get("output_space")) or metric_space
 
     # CLI flags are boolean (default False). YAML can also set defaults; CLI True wins.
     skip_skullstrip_t1_val = bool(yaml_cfg.get("skip_skullstrip_t1", False)) or bool(skip_skullstrip_t1)

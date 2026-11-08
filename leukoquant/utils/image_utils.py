@@ -137,15 +137,26 @@ def select_first_frame(input_path: str, output_path: str) -> None:
     )
 
 
+def same_voxel_grid(path_a: str, path_b: str, atol_mm: float = 1e-2) -> bool:
+    """True when two NIfTI images share one voxel grid: same 3-D shape and the same affine (within atol_mm).
+
+    Header-only. Used to detect an image that is already on the target T1 grid before it would be resampled from DWI
+    space with the DWI->T1 transform (which would be wrong for it).
+    """
+    a, b = nib.load(path_a), nib.load(path_b)
+    return tuple(a.shape[:3]) == tuple(b.shape[:3]) and bool(np.allclose(a.affine, b.affine, rtol=0, atol=atol_mm))
+
+
 def main(argv=None) -> None:
     p = argparse.ArgumentParser(
         description="Reorient a NIfTI image to RAS+, or collapse a multi-frame image to its first volume."
     )
     p.add_argument("--input",   required=True, help="Input NIfTI path (.nii or .nii.gz)")
-    p.add_argument("--output",  required=True, help="Output NIfTI path")
+    p.add_argument("--output",  help="Output NIfTI path (not used by same_grid)")
+    p.add_argument("--ref",     help="Reference NIfTI for --op same_grid")
     p.add_argument(
         "--op",
-        choices=["reorient", "canonical", "first_frame"],
+        choices=["reorient", "canonical", "first_frame", "same_grid"],
         default="reorient",
         help="Operation to perform (default: reorient)",
     )
@@ -158,6 +169,13 @@ def main(argv=None) -> None:
         stream=sys.stdout,
     )
 
+    if args.op == "same_grid":
+        # Exit status 0 = same voxel grid, 1 = different (usable directly in a shell `if`).
+        if not args.ref:
+            p.error("--op same_grid needs --ref")
+        sys.exit(0 if same_voxel_grid(args.input, args.ref) else 1)
+    if not args.output:
+        p.error("--output is required for this operation")
     if args.op == "first_frame":
         select_first_frame(args.input, args.output)
     elif args.op == "canonical":

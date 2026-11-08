@@ -575,6 +575,8 @@ config_metrics = {
     "ventricle_labels": {"gif": "50,51,52,53", "freesurfer": "4,5,43,44"},
     "tract_qc_report_map":   {s: {p: f"{output_dir}/{s}/tract_qc-{p}/outputs/qc_report.csv" for p in PARCELLATIONS} for s in subjects},
     "z_score_map":           {s: z_score_outputs(s) for s in subjects},
+    # Space the z-score maps are written in (the z-score stage default is DWI); metrics tags them accordingly.
+    "z_score_space":         config.get("output_space") or config.get("metric_space", "dwi"),
 }
 
 # ── Z-score config (cross-subject, optional) ─────────────────────────────────
@@ -643,7 +645,8 @@ config_z_score = {
     # straight into a GLM built from T1-space (e.g. 176x240x256) registrations,
     # crashing at the final z-score step with a dimension mismatch.
     "metric_space": config.get("metric_space", "dwi"),
-    "output_space": config.get("output_space", "t1"),
+    # Default: the metric space (DWI here), so the maps are not registered to T1 unless requested.
+    "output_space": config.get("output_space") or config.get("metric_space", "dwi"),
     "covariates": config.get("covariates", []),
     "polynomial_terms": config.get("polynomial_terms", []),
     "threads": config.get("z_score_threads", 4),

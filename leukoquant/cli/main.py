@@ -177,8 +177,8 @@ def process_noddi_cmd(subject: Optional[str] = None, dwi: Optional[str] = None, 
 @click.option('--output-dir', '-o', required=False, type=click.Path(), help='Output directory for z-score results')
 @click.option('--covariates', required=False, help='Comma-separated covariates (optional)')
 @click.option('--poly-terms', required=False, help='Comma-separated polynomial terms (optional)')
-@click.option('--metric-space', type=click.Choice(['t1', 'dwi'], case_sensitive=False), default='t1', show_default=True, help='Space in which metrics are defined (t1 or dwi)')
-@click.option('--output-space', type=click.Choice(['t1', 'dwi'], case_sensitive=False), default='t1', show_default=True, help='Space in which Z-score outputs are computed (t1 or dwi)')
+@click.option('--metric-space', type=click.Choice(['t1', 'dwi'], case_sensitive=False), default='dwi', show_default=True, help='Space in which metrics are defined (t1 or dwi)')
+@click.option('--output-space', type=click.Choice(['t1', 'dwi'], case_sensitive=False), default=None, help='Space in which Z-score outputs are written (t1 or dwi). Default: the metric space, so nothing is registered unless requested')
 @click.option('--dwi-pattern', required=False, help='Base:glob or {subject} pattern for DWI images (required if --metric-space=dwi or --output-space=dwi)')
 @click.option('--bval-pattern', required=False, help='Base:glob or {subject} pattern for bval files (optional)')
 @click.option('--skip-skullstrip-t1', is_flag=True, help='Skip skull stripping for target and healthy T1 images')
@@ -198,7 +198,7 @@ def process_noddi_cmd(subject: Optional[str] = None, dwi: Optional[str] = None, 
 @click.option('--gpu', is_flag=True, default=False,
               help='Use CUDA-accelerated NiftyReg for registration steps (requires an NVIDIA GPU + driver on '
                    'the execution node). Downloads the CUDA NiftyReg build on first use. Default: CPU-only.')
-def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], metric: tuple, t1_path: Optional[str], demographics_csv: Optional[str], output_dir: Optional[str], covariates: Optional[str] = None, poly_terms: Optional[str] = None, metric_space: str = 't1', output_space: str = 't1', dwi_pattern: Optional[str] = None, bval_pattern: Optional[str] = None, skip_skullstrip_t1: bool = False, skip_skullstrip_dwi: bool = False, verbose: bool = False, scheduler: Optional[str] = None, cores: Optional[int] = None, task_concurrency: Optional[int] = None, config_yaml: Optional[str] = None, force: bool = False, gpu: bool = False) -> dict:
+def process_zscore_cmd(healthy_list: Optional[str], target_list: Optional[str], metric: tuple, t1_path: Optional[str], demographics_csv: Optional[str], output_dir: Optional[str], covariates: Optional[str] = None, poly_terms: Optional[str] = None, metric_space: str = 'dwi', output_space: Optional[str] = None, dwi_pattern: Optional[str] = None, bval_pattern: Optional[str] = None, skip_skullstrip_t1: bool = False, skip_skullstrip_dwi: bool = False, verbose: bool = False, scheduler: Optional[str] = None, cores: Optional[int] = None, task_concurrency: Optional[int] = None, config_yaml: Optional[str] = None, force: bool = False, gpu: bool = False) -> dict:
     """Compute Z-scores for targets against a healthy cohort."""
     check_sge_plugin(scheduler or "local")
     # Parse repeated metric mappings into a dict

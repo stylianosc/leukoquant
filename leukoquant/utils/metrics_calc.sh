@@ -842,14 +842,21 @@ if [ -s "$INPUT_MANIFEST" ]; then
                     # it into fractional weights (0..1), which then multiplied the maps (every skeleton statistic, PSMD
                     # included, was a statistic of map x weight). Nearest neighbour keeps it binary.
                     if [ "$category" = "skeleton" ]; then _resample_interp=0; else _resample_interp=1; fi
-                    "$NIFTYREG_GPU_BIN/reg_resample" \
-                        -ref "$T1_FILE" \
-                        -flo "$_src_local" \
-                        -trans "$DIFF2T1_AFF" \
-                        -res "$dest" \
-                        -platf "$PLATF" \
-                        -inter "$_resample_interp" \
-                        -voff
+                    # An input tagged "dwi" that already sits on the T1 voxel grid (e.g. a z-score map computed in T1
+                    # space by an earlier release) must not go through the DWI->T1 transform: it is copied as is.
+                    if python3 "$SCRIPT_DIR/image_utils.py" --input "$_src_local" --ref "$T1_FILE" --op same_grid; then
+                        echo "NOTE: $src is tagged dwi but already on the T1 grid; copied without resampling."
+                        cp "$_src_local" "$dest"
+                    else
+                        "$NIFTYREG_GPU_BIN/reg_resample" \
+                            -ref "$T1_FILE" \
+                            -flo "$_src_local" \
+                            -trans "$DIFF2T1_AFF" \
+                            -res "$dest" \
+                            -platf "$PLATF" \
+                            -inter "$_resample_interp" \
+                            -voff
+                    fi
                 fi
             fi
         else

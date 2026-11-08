@@ -73,8 +73,9 @@ if not METRICS:
         "run -- the healthy reference cohort itself is incomplete, nothing left to compute."
     )
 
-METRIC_SPACE = config.get("metric_space", "t1")
-OUTPUT_SPACE = config.get("output_space", "t1")
+METRIC_SPACE = config.get("metric_space", "dwi")
+# Default: the metric space (no registration unless requested)
+OUTPUT_SPACE = config.get("output_space") or METRIC_SPACE
 OUTPUT_DIR   = config.get("output_dir", "outputs/z_scores")
 TOOL_NAME    = "z-score"
 

@@ -33,8 +33,8 @@ set -euo pipefail
 #   --healthy-metrics   space-separated healthy metric paths
 #                       (flat, grouped by metric then subject:
 #                        m1_h1, m1_h2, ..., m2_h1, m2_h2, ...)
-#   --metric-space      "t1" or "dwi" (default: "t1")
-#   --output-space      "t1" or "dwi" (default: "t1")
+#   --metric-space      "t1" or "dwi" (default: "dwi")
+#   --output-space      "t1" or "dwi" (default: same as --metric-space)
 #   --dwi-paths         space-separated DWI paths (target + N_HEALTHY, required if metric-space=dwi)
 #                       Supports: .nii/.nii.gz, DICOM directory, or .zip of DICOMs
 #   --bval-paths        (optional) space-separated bval file paths
@@ -54,8 +54,8 @@ METRIC_NAMES_STR=""
 COVARIATES=""
 POLY_TERMS=""
 THREADS="4"
-METRIC_SPACE="t1"
-OUTPUT_SPACE="t1"
+METRIC_SPACE="dwi"
+OUTPUT_SPACE=""   # empty = same as METRIC_SPACE (resolved after option parsing)
 DWI_PATHS=()
 BVAL_PATHS=()
 HEALTHY_T1S=()
@@ -137,6 +137,7 @@ EXPECTED=$(( N_METRICS * N_HEALTHY ))
 if [[ "${#HEALTHY_METRICS_ALL[@]}" -ne "$EXPECTED" ]]; then
     echo "Error: expected $EXPECTED --healthy-metrics paths, got ${#HEALTHY_METRICS_ALL[@]}." >&2; exit 1
 fi
+[[ -z "$OUTPUT_SPACE" ]] && OUTPUT_SPACE="$METRIC_SPACE"
 if [[ "$METRIC_SPACE" != "t1" && "$METRIC_SPACE" != "dwi" ]]; then
     echo "Error: --metric-space must be 't1' or 'dwi'." >&2; exit 1
 fi
