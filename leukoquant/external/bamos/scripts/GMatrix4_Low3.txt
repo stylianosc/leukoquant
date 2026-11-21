@@ -1,0 +1,8 @@
+GClasses 4
+Neighborhood 0 1 2
+Neighborhood 1 0
+Neighborhood 2 0 3
+Neighborhood 3 2
+GValue 0 0.15
+GValue 1 0.15
+GValue 2 0

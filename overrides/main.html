@@ -1,0 +1,48 @@
+{#-
+  Search and social metadata that Material for MkDocs does not emit by default:
+  Open Graph and Twitter cards, a keywords tag, and schema.org JSON-LD on the home page.
+  Per-page text comes from the `title` and `description` front matter of each page.
+-#}
+{% extends "base.html" %}
+
+{% block extrahead %}
+  {% set page_title = page.meta.title ~ " - " ~ config.site_name if page and page.meta and page.meta.title else config.site_name %}
+  {% set page_description = page.meta.description if page and page.meta and page.meta.description else config.site_description %}
+  {% set card_image = config.site_url ~ "assets/social-card.png" %}
+  <meta name="keywords" content="white matter hyperintensities, WMH, cerebral small vessel disease, MRI lesion quantification, diffusion MRI, DTI, NODDI, tractography, neuroimaging, Snakemake">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="{{ config.site_name }}">
+  <meta property="og:title" content="{{ page_title }}">
+  <meta property="og:description" content="{{ page_description | striptags | trim }}">
+  <meta property="og:url" content="{{ page.canonical_url }}">
+  <meta property="og:image" content="{{ card_image }}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="LeukoQuant: white matter hyperintensity and small vessel disease MRI quantification">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ page_title }}">
+  <meta name="twitter:description" content="{{ page_description | striptags | trim }}">
+  <meta name="twitter:image" content="{{ card_image }}">
+  {% if page and page.is_homepage %}
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "LeukoQuant",
+    "description": {{ config.site_description | striptags | trim | tojson }},
+    "url": "{{ config.site_url }}",
+    "codeRepository": "{{ config.repo_url }}",
+    "programmingLanguage": "Python",
+    "license": "https://www.apache.org/licenses/LICENSE-2.0",
+    "identifier": "https://doi.org/10.5281/zenodo.24053690",
+    "keywords": "white matter hyperintensities, cerebral small vessel disease, MRI lesion quantification, diffusion MRI, DTI, NODDI, tractography",
+    "author": {
+      "@type": "Person",
+      "name": "Stylianos Charalampous",
+      "affiliation": {"@type": "Organization", "name": "University College London"},
+      "sameAs": "https://orcid.org/0000-0002-2523-1468"
+    }
+  }
+  </script>
+  {% endif %}
+{% endblock %}

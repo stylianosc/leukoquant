@@ -1,0 +1,45 @@
+{
+  "limits": {
+    "memory_gb_max": 16,
+    "memory_gb_min": 8,
+    "memory_override_gb_max": 24,
+    "scratch_gb_max": 40,
+    "scratch_gb_min": 3
+  },
+  "note": "y = intercept + slope * Mvv + margin; margin = residual quantile; fitted on resident memory (RSS) and scratch use at the end of the run, no maxvmem available; see module docstring",
+  "path_rss_gb": {
+    "intercept": 0.8828249895491691,
+    "margin": 5.295460459057689,
+    "n": 151,
+    "quantile": 1.0,
+    "r2": 0.48846117639070885,
+    "residual_max": 5.295460459057689,
+    "slope": 0.015751202420457706,
+    "x_max": 283.11552
+  },
+  "prep_rss_gb": {
+    "intercept": 1.4501397891328878,
+    "margin": 1.3776086040842213,
+    "n": 151,
+    "quantile": 1.0,
+    "r2": 0.5482460944052749,
+    "residual_max": 1.3776086040842213,
+    "slope": 0.006320526358932534,
+    "x_max": 283.11552
+  },
+  "rows": {
+    "path_rss_gb": 151,
+    "prep_rss_gb": 151,
+    "scratch_gb": 6274
+  },
+  "scratch_gb": {
+    "intercept": 0.4966696769830295,
+    "margin": 1.7662274518090468,
+    "n": 6274,
+    "quantile": 1.0,
+    "r2": 0.7910047966089062,
+    "residual_max": 1.7662274518090468,
+    "slope": 0.011057868910937433,
+    "x_max": 283.11552
+  }
+}

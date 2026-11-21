@@ -1,0 +1,36 @@
+/**
+ * @file reg_png.h
+ * @author Marc Modat
+ * @date 30/05/2012
+ * @brief Interface between NiftyReg and pnglib
+ *
+ *  Created by Marc Modat on 30/05/2012.
+ *  Copyright (c) 2012-2018, University College London
+ *  Copyright (c) 2018, NiftyReg Developers.
+ *  All rights reserved.
+ *  See the LICENSE.txt file in the nifty_reg root folder
+ *
+ */
+
+#pragma once
+
+#include "_reg_tools.h"
+
+/* *************************************************************** */
+/** @brief This function reads a png file from the hard-drive and converts
+  * it into a nifti_structure. Using this function, you can either
+  * read the full image or only the header information
+  * @param filename Filename of the png file to read
+  * @param readData The actual data is read if the flag is set to true
+  * @return Returns a pointer to the nifti_image that contains the PNG file
+  */
+nifti_image *reg_io_readPNGfile(const char *filename, bool readData);
+/* *************************************************************** */
+/** @brief This function first converts a nifti image into a png and then
+  * save the png file.
+  * @param image Nifti image that will first be converted to a png file
+  * and then will be saved on the disk
+  * @param filename Path where the png file will be saved on the disk
+  */
+void reg_io_writePNGfile(nifti_image *image, const char *filename);
+/* *************************************************************** */

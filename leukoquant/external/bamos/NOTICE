@@ -1,0 +1,13 @@
+BaMoS / NiftySeg -- Third-Party Attribution
+=============================================
+
+This directory bundles BaMoS (Bayesian Model Selection lesion segmentation)
+and its NiftySeg dependency, originally developed by Carole Sudre, a
+leukoquant coauthor.
+
+  Original source: https://github.com/csudre/BaMoS
+
+Included here as part of leukoquant with the author's permission, under
+leukoquant's Apache-2.0 license (see the top-level LICENSE file).
+
+See CITATION.cff for citation information.
