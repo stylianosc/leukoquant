@@ -11,6 +11,19 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ---
 
+## [2.3.1] - 2026-11-21
+
+Release 2.3.1 completes the skull-strip pin of 2.3.0. `MKL_CBWR=COMPATIBLE` alone did not give the same T1 mask on the AVX-only abner nodes. The metrics step now also exports `ONEDNN_MAX_CPU_ISA=SSE41` before any `mri_synthstrip` starts, and with both settings the b0 mask, the T1 mask and the `reg_aladin` affine were identical on every node family tested.
+
+### Fixed
+- `pin_mkl_kernel` (`bash_utils.sh`) now exports `ONEDNN_MAX_CPU_ISA=SSE41` as well as `MKL_CBWR=COMPATIBLE`, and logs one `[mkl]` line for each; a value already set by the caller wins for that variable. Evidence, `mri_synthstrip` masks and `reg_aladin` affines for 3 ADNI-3 sessions, 2 repeats each, on abner (AVX), a Haswell node (AVX2), a Xeon Gold node and an AMD EPYC node (AVX-512) and arbuckle (SSE4.2): 30 of 30 runs identical per session. Neither setting alone does it (`MKL_CBWR` differs on abner, `ONEDNN_MAX_CPU_ISA` differs between node families); one thread, `MKL_ENABLE_INSTRUCTIONS` and the OpenBLAS pin did not change the mask. No measurable change in run time.
+
+### Known issues
+- Masks and tables made without both settings, including those of 2.3.0 on AVX-only nodes, can differ from pinned ones, so they should not be mixed with 2.3.1 tables in one analysis.
+- Equality of whole metrics tables across node types has still not been compared end to end, so byte-reproducibility across nodes is not claimed. The DWI-source rule described under 2.3.0 is unchanged.
+
+---
+
 ## [2.3.0] - 2026-11-21
 
 Release 2.3.0 pins the numerical kernels of the metrics step (OpenBLAS for numpy and MKL for the skull-strip network), which reduces the CPU as a source of differences between nodes in the parts we tested (one known exception, see Known issues), makes the lesion shape eigenvalues reproducible from run to run, and records where each number came from. End-to-end equality of the metrics tables across node types has not been verified (see Known issues), and tables generated before the pins differ slightly from pinned ones, so tables from the two should not be mixed in one analysis. The metrics tables of the accompanying data release are described with the paper, not here.

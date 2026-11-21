@@ -5,8 +5,12 @@ node than on AVX-512 (Xeon Gold) and AMD EPYC nodes for the same input (raw mask
 mask difference moved the DWI-to-T1 affine and with it the DTI/NODDI values sampled in the lesions. The cause is MKL, which
 selects its kernels from the CPU at run time. MKL_CBWR=COMPATIBLE restricts it to kernels every x86 CPU produces the same
 bits with. With it, the Haswell, Xeon Gold and AMD nodes gave identical b0 and T1 masks and identical reg_aladin affines
-for three sessions, two repeats each. ONEDNN_MAX_CPU_ISA, one thread and the OpenBLAS pin did not change the mask.
-The variable is read when MKL is loaded, so it has to be exported before mri_synthstrip starts.
+for three sessions, two repeats each, but the AVX-only abner node still gave another mask for one session. Adding
+ONEDNN_MAX_CPU_ISA=SSE41 (the oneDNN kernels PyTorch uses, which MKL_CBWR does not reach) made the b0 mask, the T1 mask
+and the reg_aladin affine identical on abner (AVX), Haswell (AVX2), Xeon Gold and AMD EPYC (AVX-512) and arbuckle (SSE4.2),
+three sessions, two repeats each (30 of 30 runs). Neither variable alone does it. One thread, MKL_ENABLE_INSTRUCTIONS and the
+OpenBLAS pin did not change the mask. Both variables are read when the libraries load, so they have to be exported before
+mri_synthstrip starts.
 """
 import os
 import re
@@ -25,6 +29,7 @@ def _bash(snippet, env):
 def _without_pin():
     env = os.environ.copy()
     env.pop("MKL_CBWR", None)
+    env.pop("ONEDNN_MAX_CPU_ISA", None)
     return env
 
 
@@ -34,9 +39,24 @@ def test_pin_mkl_exports_the_compatible_mode():
     assert "mode=COMPATIBLE" in res.stdout
 
 
+def test_pin_mkl_also_limits_onednn_to_sse41():
+    # Both settings are needed: MKL_CBWR alone differs on abner, ONEDNN_MAX_CPU_ISA alone differs between node families.
+    res = _bash('pin_mkl_kernel; echo "isa=$ONEDNN_MAX_CPU_ISA"', _without_pin())
+    assert "isa=SSE41" in res.stdout
+
+
 def test_pin_mkl_logs_what_it_did():
     res = _bash("pin_mkl_kernel", _without_pin())
-    assert re.fullmatch(r"\[mkl\] MKL_CBWR=COMPATIBLE \(.+\)", res.stdout.strip()), res.stdout
+    lines = res.stdout.strip().splitlines()
+    assert any(re.fullmatch(r"\[mkl\] MKL_CBWR=COMPATIBLE \(.+\)", l) for l in lines), res.stdout
+    assert any(re.fullmatch(r"\[mkl\] ONEDNN_MAX_CPU_ISA=SSE41 \(.+\)", l) for l in lines), res.stdout
+
+
+def test_pin_mkl_respects_each_value_set_by_the_caller_independently():
+    env = _without_pin()
+    env["ONEDNN_MAX_CPU_ISA"] = "AVX2"
+    res = _bash('pin_mkl_kernel; echo "mode=$MKL_CBWR isa=$ONEDNN_MAX_CPU_ISA"', env)
+    assert "mode=COMPATIBLE isa=AVX2" in res.stdout
 
 
 def test_pin_mkl_respects_a_value_set_by_the_caller():

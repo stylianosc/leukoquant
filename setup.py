@@ -14,7 +14,7 @@ requirements = (this_directory / "requirements.txt").read_text().splitlines()
 
 setup(
     name="leukoquant",
-    version="2.3.0",
+    version="2.3.1",
     author="Stylianos Charalampous",
     author_email="stylianosc@users.noreply.github.com",
     description="Lesion-informed white matter damage metrics toolkit for cerebral small vessel disease",
