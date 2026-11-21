@@ -4,7 +4,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10-blue.svg)](https://www.python.org/)
 [![Documentation](https://img.shields.io/badge/docs-GitHub%20Pages-blue.svg)](https://stylianosc.github.io/leukoquant/)
 [![Cite](https://img.shields.io/badge/cite-CITATION.cff-green.svg)](CITATION.cff)
-[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24053690.svg)](https://doi.org/10.5281/zenodo.24053690)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.24421190.svg)](https://doi.org/10.5281/zenodo.24421190)
 
 **Lesion-informed white matter damage metrics toolkit for cerebral small vessel disease.**
 
@@ -14,7 +14,7 @@ LeukoQuant is an open-source Python toolkit for quantifying white matter hyperin
 
 > **Status:** LeukoQuant is currently available as a pre-release to support open science initiatives. A manuscript detailing the core methodology and our comprehensive clinical validation across the ADNI, OASIS Brain, and EPAD cohorts is currently in preparation.
 >
-> **Citation:** If you use this software in the meantime, please cite it via our Zenodo DOI: [10.5281/zenodo.24053690](https://doi.org/10.5281/zenodo.24053690). If you are planning a large-scale clinical application, please contact the authors as our primary validation manuscript is imminent.
+> **Citation:** If you use this software in the meantime, please cite it via our Zenodo DOI: [10.5281/zenodo.24421190](https://doi.org/10.5281/zenodo.24421190). If you are planning a large-scale clinical application, please contact the authors as our primary validation manuscript is imminent.
 
 ---
 
@@ -161,7 +161,7 @@ If you use LeukoQuant in your research, please cite (also available as [CITATION
   year      = {2026},
   version   = {2.3.0},
   url       = {https://github.com/stylianosc/leukoquant},
-  doi       = {10.5281/zenodo.24053690},
+  doi       = {10.5281/zenodo.24421190},
   license   = {Apache-2.0}
 }
 ```
