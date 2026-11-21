@@ -741,14 +741,15 @@ pin_blas_kernel() {
     return 0
 }
 
-# Make the skull-strip network give the same mask on every node.
+# Make the skull-strip network give the same mask on as many nodes as possible.
 #
 # mri_synthstrip is a PyTorch network that runs on the CPU, and its MKL picks its kernels from the CPU at run
 # time. On an AVX2 node (Haswell) the T1 mask differed from the one on AVX-512 (Xeon Gold) and AMD EPYC nodes for the
 # same input, the DWI-to-T1 affine moved with it, and so did every DTI and NODDI value sampled in the lesions
 # (ADNI-3, 2026-11-21; see tests/test_mkl_kernel_pin.py). MKL_CBWR=COMPATIBLE restricts MKL to kernels that give the same
 # bits on every x86 CPU. With it, three nodes of three CPU families gave identical b0 and T1 masks and identical
-# reg_aladin affines (3 sessions, 2 repeats). The OpenBLAS pin above does not reach MKL, and ONEDNN_MAX_CPU_ISA and a
+# reg_aladin affines (3 sessions, 2 repeats). Known exception: the AVX-only abner node still gave a different T1 mask
+# for one session (subj-130-s-6611, 2026-11-21), so this is not a full node-independence guarantee. The OpenBLAS pin above does not reach MKL, and ONEDNN_MAX_CPU_ISA and a
 # single thread did not change the mask. The run time is unchanged. MKL reads the variable when it is loaded, so it is
 # exported before any mri_synthstrip process starts. A value set by the caller wins. Never fails the job.
 pin_mkl_kernel() {
@@ -757,7 +758,7 @@ pin_mkl_kernel() {
         return 0
     fi
     export MKL_CBWR="COMPATIBLE"
-    echo "[mkl] MKL_CBWR=${MKL_CBWR} (pinned: skull-strip masks do not depend on the CPU)"
+    echo "[mkl] MKL_CBWR=${MKL_CBWR} (pinned: restricts MKL to CPU-independent kernels; identical masks on AVX2, AVX-512 and AMD nodes, not guaranteed on AVX-only nodes)"
     return 0
 }
 
